@@ -24,12 +24,10 @@ CalModKK <- function (N, Ti, R, KK) {
     # Prior KKs #
     
     rtnb ~ dgamma(286.3235, 223.4650)
-    sh ~ dgamma(83.88592,125.70331)
-    rt1 ~ dbeta(47.13542,633.08366)
-    rt <- rt1/(1-rt1)
     sigma ~ dgamma(0.001, 0.001)
-    tkksh ~ dgamma(0.001, 0.001)
-    tkkrt1 ~ dbeta(1,1)
+    
+    tkksh ~ dgamma(83.88592,125.70331)
+    tkkrt1 ~ dbeta(47.13542,633.08366)
     tkkrt <- tkkrt1/(1-tkkrt1)
     
   # model 
@@ -51,7 +49,7 @@ CalModKK <- function (N, Ti, R, KK) {
     
     #inits# .RNG.seed, .RNG.name, Status, sigma
     #data# N, Ti, R, KK
-    #monitor# prev, rtnb, sh, rt, Status, tKK
+    #monitor# prev, rtnb, Status, tKK
 }"
   
   
@@ -82,12 +80,9 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
 
   # Prior KKs 
   rtnb ~ dgamma(286.3235, 223.4650)
-  sh ~ dgamma(83.88592,125.70331)
-  rt1 ~ dbeta(47.13542,633.08366)
-  rt <- rt1/(1-rt1)
       
-  tkksh ~ dgamma(0.001, 0.001)
-  tkkrt1 ~ dbeta(1,1)
+  tkksh ~ dgamma(83.88592,125.70331)
+  tkkrt1 ~ dbeta(47.13542,633.08366)
   tkkrt <- tkkrt1/(1-tkkrt1)
 
   k ~ dgamma(0.001, 0.001)
@@ -120,11 +115,78 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
   
   #inits# .RNG.seed, .RNG.name, Status, sigma, prob   
   #data# N, Ti, R, KK, CCA
-  #monitor#  prev, rtnb, k, intercept, sh, rt, Status, CCA, tKK
+  #monitor#  prev, rtnb, k, intercept, Status, CCA, tKK, prob
 }"
   
   # Run model #
   Results <- run.jags(m, burnin=5000, sample=10000, n.chains=2, jags.refresh = 1, method = 'parallel',
+                      plots = F, silent.jags = F)
+  return(Results)
+}
+
+#### KK and G-Score model ####
+
+CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
+  ## Set seed ##
+  ##this is so that they start on different values ##
+  .RNG.seed <- function(chain)
+    return( switch(chain, "1"= 1, "2"= 2) )
+  .RNG.name <- function(chain)
+    return( switch(chain, "1" = "base::Super-Duper", "2" = "base::Wichmann-Hill") )
+  
+  ## Initialize Status ##
+  Status <- matrix(1,nrow=210, ncol=4)
+  prob <- array(rep(CCA10,2),dim=c(N,Ti,2))
+  sigma<- 0.001
+  
+  m <- "model {
+  
+  # MODEL 
+   # Prior prevalence #
+    prev ~ dbeta(1,1)
+   
+    # Prior KKs 
+    rtnb ~ dgamma(286.3235, 223.4650)
+
+    tkksh ~ dgamma(0.001, 0.001)
+    tkkrt1 ~ dbeta(1,1)
+    tkkrt <- tkkrt1/(1-tkkrt1)
+    
+    k ~ dgamma(0.001, 0.001)
+    intercept ~ dgamma(0.001, 0.001)
+    
+    for(n in 1:N){	# run through pop
+      
+      for (t in 1:Ti){ # run through timepoints
+      
+            Status[n,t] ~ dbern(prev)
+            
+            lambda[n,t] <- tKK[n,Status[n,t]+1,t] 
+            
+            for( r in 1:R){  # run through repeat measures
+              KK[n,t,r] ~ dnegbin(rtnb/(lambda[n,t]+rtnb),rtnb) 
+              } # end or r loop
+      
+            tKK[n,1,t] <- 0
+            tKK[n,2,t] ~ dgamma(tkksh, tkkrt)
+  
+            prob[n,t,1] ~ dnorm(0,1.093606) 
+            prob[n,t,2] ~ dnorm(9 / (1 + exp(-k*(tKK[n,2,t]-intercept))),1.093606)
+            
+            CCA10[n,t] ~ dround(prob[n,t,Status[n,t]+1],0)
+            
+      } # t loop
+    } # N loop   
+    
+ 
+  #inits# .RNG.seed, .RNG.name, Status, prob,  sigma
+  #data# N, Ti, R, KK, CCA10
+  #monitor#  prev, rtnb, k, intercept, Status, tKK, CCA10   
+  
+}"
+  
+  # Run model #
+  Results <- run.jags(m, burnin=10000, sample=20000, n.chains=2, jags.refresh = 1, method = 'parallel',
                       plots = F, silent.jags = F)
   return(Results)
 }

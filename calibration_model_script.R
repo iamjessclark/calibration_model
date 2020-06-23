@@ -65,17 +65,40 @@ dev.off()
 #### KK and CCA Model ####
 
 kkcca.model <- CalModKKCCA(dim(kk)[1],dim(kk)[2],dim(kk)[3],kk,cca)
-
+# monitoring prev, rtnb, k, intercept, Status, CCA, tKK
 prevKKcca <- density(c(kkcca.model$mcmc[[1]][,"prev"], kkcca.model$mcmc[[2]][,"prev"]))
-model.outputkkcca <- as.data.frame(as.matrix(as.mcmc(kkcca.model)))
-status.kkcca <- model.outputkkcca[,5:ncol(model.outputkkcca)]
+model.outputkkcca <- as.data.frame(as.matrix(as.mcmc(prevKKcca)))
+status.kkcca <- model.outputkkcca[,5:844]
 status.time.KKcca <- time.steps(status.kkcca)
 
 pdf("probinfKKcca.pdf",width=3,height=8)
 par(font=2, cex.axis=0.75, lwd=2, mar=c(2.1,2.2,1.2,0)+0.1,mgp=c(3,0.4,0))
 par(mfrow=c(1,1))
 
-prob.inf.kk <- qplot(value, data = status.time.KKcca, geom = "histogram", fill=time, binwidth=0.02) +
+prob.inf.kkcca <- qplot(value, data = status.time.KKcca, geom = "histogram", fill=time, binwidth=0.02) +
+  scale_fill_manual(values = c("#e7298a", "#1b9e77", "#d95f02", "#7570b3"))+
+  geom_text(data=anno, aes(x = xcoord, y = ycoord, label = label))+
+  facet_grid(time~.)+
+  theme_bw()+coord_cartesian(ylim=c(0, 200), xlim=c(0,1))+theme(legend.position = "none")+
+  ylab("Number of Hosts") + xlab("Probability of Being Infected")
+
+prob.inf.kkcca
+dev.off()
+
+#### KK and G-Score Model ####
+
+kkGscore.model <- CalModKKGScore(dim(kk)[1],dim(kk)[2],dim(kk)[3],kk,ccagscore)
+
+prevKKGScore <- density(c(kkGscore.model$mcmc[[1]][,"prev"], kkGscore.model$mcmc[[2]][,"prev"]))
+outputkkGscore <- as.data.frame(as.matrix(as.mcmc(kkGscore.model)))
+status.kkgscore <- outputkkGscore[,5:844]
+status.time.KKgscore <- time.steps(status.kkgscore)
+
+pdf("probinfKKgscore.pdf",width=3,height=8)
+par(font=2, cex.axis=0.75, lwd=2, mar=c(2.1,2.2,1.2,0)+0.1,mgp=c(3,0.4,0))
+par(mfrow=c(1,1))
+
+prob.inf.kk <- qplot(value, data = status.time.KKgscore, geom = "histogram", fill=time, binwidth=0.02) +
   scale_fill_manual(values = c("#e7298a", "#1b9e77", "#d95f02", "#7570b3"))+
   geom_text(data=anno, aes(x = xcoord, y = ycoord, label = label))+
   facet_grid(time~.)+
