@@ -30,31 +30,31 @@ CalModKK <- function (N, Ti, R, KK) {
     tkkrt1 ~ dbeta(47.13542,633.08366)
     tkkrt <- tkkrt1/(1-tkkrt1)
     
-  # model 
-  for(n in 1:N){	# run through pop
-
-    for (t in 1:Ti){ # run through time
-      Status[n,t] ~ dbern(prev)
-      
-      tKK[n,1,t] <- 0
-      tKK[n,2,t] ~ dgamma(tkksh, tkkrt)
-      
-      lambda[n,t] <- tKK[n,Status[n,t]+1,t] 
+    # model 
+    for(n in 1:N){	# run through pop
+  
+      for (t in 1:Ti){ # run through time
+        Status[n,t] ~ dbern(prev)
         
-        for(r in 1:R){ # run through repeated measures to set the baseline KK over the repeated measures, this is the LLH
-           KK[n,t,r] ~ dnegbin(rtnb/(lambda[n,t]+rtnb),rtnb)
-        } # end or r loop
-      } # end time
-  } # end n loop
+        tKK[n,1,t] <- 0
+        tKK[n,2,t] ~ dgamma(tkksh, tkkrt)
+        
+        lambda[n,t] <- tKK[n,Status[n,t]+1,t] 
+          
+          for(r in 1:R){ # run through repeated measures to set the baseline KK over the repeated measures, this is the LLH
+             KK[n,t,r] ~ dnegbin(rtnb/(lambda[n,t]+rtnb),rtnb)
+          } # end or r loop
+        } # end time
+      } # end n loop
     
     #inits# .RNG.seed, .RNG.name, Status, sigma
     #data# N, Ti, R, KK
-    #monitor# prev, rtnb, Status, tKK
+    #monitor# prev, rtnb, Status
 }"
   
   
   # Run model #
-  Results <- run.jags(m, burnin=5000, sample=10000, n.chains=2, jags.refresh = 1, method = 'parallel',
+  Results <- run.jags(m, burnin=10000, sample=20000, n.chains=2, jags.refresh = 1, method = 'parallel',
                       plots = F, silent.jags = F)
   return(Results)
 }
@@ -115,11 +115,11 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
   
   #inits# .RNG.seed, .RNG.name, Status, sigma, prob   
   #data# N, Ti, R, KK, CCA
-  #monitor#  prev, rtnb, k, intercept, Status, CCA, tKK, prob
+  #monitor#  rtnb, prev, k, intercept, Status, KK, CCA
 }"
   
   # Run model #
-  Results <- run.jags(m, burnin=5000, sample=10000, n.chains=2, jags.refresh = 1, method = 'parallel',
+  Results <- run.jags(m, burnin=10000, sample=20000, n.chains=2, jags.refresh = 1, method = 'parallel',
                       plots = F, silent.jags = F)
   return(Results)
 }
@@ -181,7 +181,7 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
  
   #inits# .RNG.seed, .RNG.name, Status, prob,  sigma
   #data# N, Ti, R, KK, CCA10
-  #monitor#  prev, rtnb, k, intercept, Status, tKK, CCA10   
+  #monitor#  prev, rtnb, k, intercept, Status, KK, CCA10   
   
 }"
   
@@ -403,6 +403,26 @@ time.steps <- function(model.output){
   return(props)
 }
 
+# for getting the mean kk estimates out of the model output
+
+time.pointmeans <- function(list.name){
+  for(i in 1:length(list.name)){
+    colnames(list.name[[i]]) <- paste("CID", seq(from=1, to=210, length.out = 210), sep="")
+  }
+  
+  
+  for(i in 1:length(list.name)){
+    list.name[[i]] <- list.name[[i]] %>% pivot_longer(everything(),
+                                                      names_to = "child", values_to = "count")
+  }
+  
+  counts <- cbind(list.name[[1]], list.name[[2]][,2], list.name[[3]][,2], list.name[[4]][,2], list.name[[5]][,2], list.name[[6]][,2]) 
+  colnames(counts) <- c("child", "count1", "count2", "count3", "count4", "count5", "count6")
+  counts$t1.mean <- rowMeans(counts[,2:ncol(counts)])
+  
+  return(counts)
+  
+}
 
 
 
