@@ -115,7 +115,7 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
   
   #inits# .RNG.seed, .RNG.name, Status, sigma, prob   
   #data# N, Ti, R, KK, CCA
-  #monitor#  rtnb, prev, k, intercept, Status, KK, CCA
+  #monitor#  rtnb, prev, k, intercept, Status
 }"
   
   # Run model #
@@ -181,7 +181,7 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
  
   #inits# .RNG.seed, .RNG.name, Status, prob,  sigma
   #data# N, Ti, R, KK, CCA10
-  #monitor#  prev, rtnb, k, intercept, Status, KK, CCA10   
+  #monitor#  prev, rtnb, k, intercept, Status
   
 }"
   
@@ -407,22 +407,254 @@ time.steps <- function(model.output){
 
 time.pointmeans <- function(list.name){
   for(i in 1:length(list.name)){
-    colnames(list.name[[i]]) <- paste("CID", seq(from=1, to=210, length.out = 210), sep="")
+    colnames(list.name[[i]]) <- CID
   }
   
   
   for(i in 1:length(list.name)){
     list.name[[i]] <- list.name[[i]] %>% pivot_longer(everything(),
-                                                      names_to = "child", values_to = "count")
+                                                      names_to = "CID", values_to = "count")
   }
   
   counts <- cbind(list.name[[1]], list.name[[2]][,2], list.name[[3]][,2], list.name[[4]][,2], list.name[[5]][,2], list.name[[6]][,2]) 
   colnames(counts) <- c("child", "count1", "count2", "count3", "count4", "count5", "count6")
-  counts$t1.mean <- rowMeans(counts[,2:ncol(counts)])
+  counts$mean <- rowMeans(counts[,2:ncol(counts)])
   
   return(counts)
   
 }
 
+#### log curve function ####
+
+logcurve <- function(x,k,intercept){
+  y <- 1 / (1 + exp(-k*(x-intercept)))
+  return(y)
+}
+
+#### add legend function ####
+
+add_legend <- function(...) {
+  opar <- par(fig=c(0, 1, 0, 1), oma=c(0, 0, 0, 0), 
+              mar=c(0, 0, 0, 0), new=TRUE)
+  on.exit(par(opar))
+  plot(0, 0, type='n', bty='n', xaxt='n', yaxt='n')
+  legend(...)
+}
+
+#### roc curve function ####
+
+diag_spec <- function(status.output, mergekkcca, data.condition.column ){
+  
+  t1 <- as.data.frame(status.output[,1:210])
+  t2 <- as.data.frame(status.output[,211:420])
+  t3 <- as.data.frame(status.output[,421:630])
+  t4 <- as.data.frame(status.output[,631:840])
+  
+  colnames(t1) <- CID
+  colnames(t2) <- CID
+  colnames(t3) <- CID
+  colnames(t4) <- CID
+  
+  t1status.sample <- t1[sample.int(nrow(t1), 500, replace=FALSE, prob=NULL),]
+  t1status.sample <- t(t1status.sample)
+  t1status.sample <- as.data.frame(cbind(rownames(t1status.sample), data.frame(t1status.sample, row.names=NULL)))
+  t1status.sample <- t1status.sample %>% rename(CID=`rownames(t1status.sample)`)
+  
+  # join to the kkpos
+  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+    filter(dateN=="Pre-T")%>%
+    right_join(t1status.sample, by="CID")
+  
+  merge <- merge[-which(is.na(merge$dateN)==T),]
+  merge <- merge[!duplicated(merge[,"CID"]),]  
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  merge <- merge %>% mutate_if(is.character, as.factor)
+  speclist <- list()
+  
+  # calculate how often each one occurs and get proportions 
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
+      mutate(proportion = n/sum(n))
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
+    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+  }
+  
+  roct1 <- rbindlist(test.specs)
+  roct1 <- roct1 %>% mutate(time = "pre-T")%>%mutate_if(is.character, as.factor)
+  
+  # 2nd time point 
+  
+  t2status.sample <- t2[sample.int(nrow(t2), 500, replace=FALSE, prob=NULL),]
+  t2status.sample <- t(t2status.sample)
+  t2status.sample <- as.data.frame(cbind(rownames(t2status.sample), data.frame(t2status.sample, row.names=NULL)))
+  t2status.sample <- t2status.sample %>% rename(CID=`rownames(t2status.sample)`)
+  
+  
+  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+    filter(dateN=="3 weeks")%>%
+    right_join(t2status.sample, by="CID")
+  
+  merge <- merge[-which(is.na(merge$dateN)==T),]
+  merge <- merge[!duplicated(merge[,"CID"]),]  
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  merge <- merge %>% mutate_if(is.character, as.factor)
+  speclist <- list()
+  
+  # calculate how often each one occurs and get proportions 
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
+      mutate(proportion = n/sum(n))
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
+    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+  }
+  
+  roct2 <- rbindlist(test.specs)
+  roct2 <- roct2 %>% mutate(time = "3 weeks")%>%mutate_if(is.character, as.factor)
+  
+  # 3rd time point 
+  
+  t3status.sample <- t3[sample.int(nrow(t3), 500, replace=FALSE, prob=NULL),]
+  t3status.sample <- t(t3status.sample)
+  t3status.sample <- as.data.frame(cbind(rownames(t3status.sample), data.frame(t3status.sample, row.names=NULL)))
+  t3status.sample <- t3status.sample %>% rename(CID=`rownames(t3status.sample)`)
+  
+  
+  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+    filter(dateN=="9 weeks")%>%
+    right_join(t3status.sample, by="CID")
+  
+  merge <- merge[-which(is.na(merge$dateN)==T),]
+  merge <- merge[!duplicated(merge[,"CID"]),]  
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  merge <- merge %>% mutate_if(is.character, as.factor)
+  speclist <- list()
+  
+  # calculate how often each one occurs and get proportions 
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
+      mutate(proportion = n/sum(n))
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
+    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+  }
+  
+  roct3 <- rbindlist(test.specs)
+  roct3 <- roct3 %>% mutate(time = "9 weeks")%>%mutate_if(is.character, as.factor)
+  
+  # 4th time point 
+  
+  t4status.sample <- t4[sample.int(nrow(t4), 500, replace=FALSE, prob=NULL),]
+  t4status.sample <- t(t4status.sample)
+  t4status.sample <- as.data.frame(cbind(rownames(t4status.sample), data.frame(t4status.sample, row.names=NULL)))
+  t4status.sample <- t4status.sample %>% rename(CID=`rownames(t4status.sample)`)
+  
+  
+  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+    filter(dateN=="6 months")%>%
+    right_join(t4status.sample, by="CID")
+  
+  merge <- merge[-which(is.na(merge$dateN)==T),]
+  merge <- merge[!duplicated(merge[,"CID"]),]  
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  merge <- merge %>% mutate_if(is.character, as.factor)
+  speclist <- list()
+  
+  # calculate how often each one occurs and get proportions 
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
+      mutate(proportion = n/sum(n))
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
+    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+  }
+  
+  roct4 <- rbindlist(test.specs)
+  roct4 <- roct4 %>% mutate(time = "6 months")%>%mutate_if(is.character, as.factor)
+  
+  
+  rocalltime <- bind_rows(roct1, roct2, roct3, roct4)
+  return(rocalltime)
+}
 
 
+
+
+  
