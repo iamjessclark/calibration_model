@@ -161,8 +161,6 @@ p_names <- map_chr(p, ~paste0(.x*100, "%"))
 p_funs <- map(p, ~partial(quantile, probs = .x, na.rm = TRUE)) %>% 
   set_names(nm = p_names)
 
-p_funs
-
 kkccaquantiles <- kkccalogcurvesample %>% group_by(x) %>%
   summarise_at(vars(value),funs(!!!p_funs))
 
@@ -484,6 +482,7 @@ for(i in 1:length(wk9kklist)){
 
 roc.9wk <- rbindlist(test.specs.wk9kk)
 roc.9wk <- roc.9wk %>% mutate(time = "9 weeks")%>%mutate_if(is.character, as.factor)
+
 # t3sample 500 random particals 
 kkt4status.sample <- kkt4[sample.int(nrow(kkt4), 500, replace=FALSE, prob=NULL),]
 kkt4status.sample <- t(kkt4status.sample)
@@ -533,20 +532,154 @@ for(i in 1:length(sixmkklist)){
 roc.6m <- rbindlist(test.specs.sixmkk)
 roc.6m <- roc.6m %>% mutate(time = "6 months")%>%mutate_if(is.character, as.factor)
 
+kk.spec <- bind_rows(roc.pretkk, roc.3wk, roc.9wk, roc.6m)%>% mutate_if(is.character, as.factor)
+kk.spec$time <- factor(kk.spec$time, levels=c("pre-T", "3 weeks", "9 weeks", "6 months"))
+
+kk.spec.qtiles <- kk.spec %>% group_by(time) %>%
+                  summarise_at(vars(TPR, FPR),funs(!!!p_funs))
+
+kk.spec.plot <- ggplot()+
+  geom_jitter(kk.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  ylab("True Positive Rate") + xlab("False Positive Rate")+
+  ggsave("kkspecplot.pdf")
+
 #### CCA Model T positive ####
-ccaTpos.spec <- diag_spec(status.kkcca, mergekkcca, mergekkcca$ccaTpos) 
-cca1pos.spec <- diag_spec(status.kkcca, mergekkcca, mergekkcca$cca1pos) 
-cca2pos.spec <- diag_spec(status.kkcca, mergekkcca, mergekkcca$cca2pos) 
-cca3pos.spec <- diag_spec(status.kkcca, mergekkcca, mergekkcca$cca3os) 
-gscore2pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore2pos) 
-gscore3pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore3pos) 
-gscore4pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore4pos) 
-gscore5pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore5pos) 
-gscore6pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore6pos) 
-gscore7pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore7pos) 
-gscore8pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore8pos) 
-gscore9pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore9pos) 
-gscore10pos.spec <- diag_spec(status.kkgscore, mergekkcca, mergekkcca$gscore10pos) 
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, ccaTpos)
+ccaTpos.spec <- diag_spec(status.kkcca, condition.data.frame) 
+ccaTpos.spec$time <- factor(ccaTpos.spec$time, levels=c("pre-T", "3 weeks", "9 weeks", "6 months"))
+specsensccaT <- ccaTpos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="trace")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, cca1pos)
+cca1pos.spec <- diag_spec(status.kkcca, condition.data.frame) 
+specsenscca1 <- cca1pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs))%>% 
+  mutate(threshold="+")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, cca2pos)
+cca2pos.spec <- diag_spec(status.kkcca, condition.data.frame) 
+specsenscca2 <- cca2pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs))%>% 
+  mutate(threshold="++")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, cca3pos)
+cca3pos.spec <- diag_spec(status.kkcca, condition.data.frame) 
+specsenscca3 <- cca3pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs))%>% 
+  mutate(threshold="+++")
+
+ccasensspecquant <- bind_rows(specsensccaT,specsenscca1, specsenscca2, specsenscca2 )%>%
+  mutate_if(is.character, as.factor)
 
 
+CCAT.spec.plot <- ggplot()+
+  geom_point(ccaTpos.spec, mapping=aes(x=FPR , y=TPR))+
+  geom_point(cca1pos.spec, mapping=aes(x=FPR , y=TPR))+
+  geom_point(cca2pos.spec, mapping=aes(x=FPR , y=TPR))+
+  geom_point(cca3pos.spec, mapping=aes(x=FPR , y=TPR))+
+  ylab("True Positive Rate") + xlab("False Positive Rate")
+
+
+CCAT.spec.plot <- ggplot()+
+  geom_point(ccasensspecquant, mapping=aes(x=`FPR_50%` , y=`TPR_50%`, colour=threshold, shape=time))+
+  geom_line()+
+  ylab("True Positive Rate") + xlab("False Positive Rate")
+
+polygonx <- c(ccasensspecquant$`FPR_50%`, rev(ccasensspecquant$`FPR_50%`))
+polygony <- c(ccasensspecquant$`TPR_2.5%`, rev(ccasensspecquant$`TPR_97.5%`))
+
+plot(NA,NA, xlim = c(0,1), ylim = c(0,1), xlab="False Positive Rate", ylab="True Positive Rate", cex.axis=1)
+lines(ccasensspecquant$`FPR_50%`~ccasensspecquant$`TPR_50%`, col="orange", lwd=2, lty = 1)
+polygon(x=polygonx, y=polygony, col=adjustcolor("grey", alpha.f=0.4), border=NA)
+
+add_legend("top", legend=c(c("KK & CCA (normal)", "KK & G-Score")), lty=1, lwd=2,
+           col=c("orange","darkred"),
+           horiz=TRUE, bty='n', cex=1)
+dev.copy(pdf, "logcurve.confint.pdf", height = 6, width = 6)
+dev.off()
+graphics.off()
+
+
+CCAT.spec.plot <- ggplot()+
+  geom_jitter(gscore2pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore3pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore4pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore5pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore6pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore7pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore8pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore9pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  geom_jitter(gscore10pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
+  ylab("True Positive Rate") + xlab("False Positive Rate")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore2pos)
+gscore2pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+specsensgscore2 <- gscore2pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score2")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore3pos)
+gscore3pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+specsensgscore3 <- gscore3pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score3")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore4pos)
+gscore4pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+specsensgscore4 <- gscore4pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score4")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore5pos)
+gscore5pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+specsensgscore5 <- gscore5pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score5")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore6pos)
+gscore6pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+specsensgscore6 <- gscore6pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score6")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore7pos)
+gscore7pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+specsensgscore7 <- gscore7pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score7")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore8pos)
+gscore8pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+specsensgscore8 <- gscore8pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score8")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore9pos)
+gscore9pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+specsensgscore9 <- gscore9pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score9")
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore10pos)
+gscore10pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+specsensgscore10 <- gscore10pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score10")
+
+gscoresensspecquant <- bind_rows(specsensgscore2, specsensgscore3, specsensgscore4,
+                                 specsensgscore5, specsensgscore6, specsensgscore7, specsensgscore8, 
+                                 specsensgscore9, specsensgscore10)%>% 
+                        mutate(time=factor(time, levels=c("pre-T", "3 weeks", "9 weeks", "6 months")))%>%
+                        mutate(threshold=factor(threshold, levels=c("G-Score2","G-Score3","G-Score4","G-Score5","G-Score6","G-Score7","G-Score8","G-Score9","G-Score10")))
+
+gscoresensspecall <- bind_rows(gscore2pos.spec, gscore3pos.spec,gscore4pos.spec, gscore5pos.spec, gscore6pos.spec, gscore7pos.spec, gscore8pos.spec, gscore9pos.spec, gscore10pos.spec)
+
+gscore.spec.plot <- ggplot()+
+  geom_point(gscoresensspecquant, mapping=aes(x=`FPR_50%` , y=`TPR_50%`, colour=threshold))+
+  geom_line(data=gscoresensspecall, aes(x=FPR, y=TPR))+
+  geom_ribbon(data=gscoresensspecall, aes(ymin=TPR, ymax=))+
+  facet_wrap(time~.)+
+  ylab("True Positive Rate") + xlab("False Positive Rate")
 

@@ -190,7 +190,7 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
                       plots = F, silent.jags = F)
   return(Results)
 }
-
+ 
 
 
 #### Data manipulation functions ####
@@ -443,7 +443,7 @@ add_legend <- function(...) {
 
 #### roc curve function ####
 
-diag_spec <- function(status.output, mergekkcca, data.condition.column ){
+diag_spec <- function(status.output, condition.data.frame ){
   
   t1 <- as.data.frame(status.output[,1:210])
   t2 <- as.data.frame(status.output[,211:420])
@@ -461,7 +461,7 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   t1status.sample <- t1status.sample %>% rename(CID=`rownames(t1status.sample)`)
   
   # join to the kkpos
-  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+  merge <- condition.data.frame %>%
     filter(dateN=="Pre-T")%>%
     right_join(t1status.sample, by="CID")
   
@@ -482,7 +482,6 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
       }
     }
   }
-  merge <- merge %>% mutate_if(is.character, as.factor)
   speclist <- list()
   
   # calculate how often each one occurs and get proportions 
@@ -495,8 +494,21 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   for(i in 1:length(speclist)){
     test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
     colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
-    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
+    } else {
+      test.specs[[i]][1,1] <- NA
+    }
+    
+    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+    } else {
+      test.specs[[i]][1,2] <- NA
+    }
   }
   
   roct1 <- rbindlist(test.specs)
@@ -510,7 +522,7 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   t2status.sample <- t2status.sample %>% rename(CID=`rownames(t2status.sample)`)
   
   
-  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+  merge <- condition.data.frame %>%
     filter(dateN=="3 weeks")%>%
     right_join(t2status.sample, by="CID")
   
@@ -531,7 +543,6 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
       }
     }
   }
-  merge <- merge %>% mutate_if(is.character, as.factor)
   speclist <- list()
   
   # calculate how often each one occurs and get proportions 
@@ -544,8 +555,21 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   for(i in 1:length(speclist)){
     test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
     colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
-    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
+    } else {
+      test.specs[[i]][1,1] <- NA
+    }
+    
+    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+    } else {
+      test.specs[[i]][1,2] <- NA
+    }
   }
   
   roct2 <- rbindlist(test.specs)
@@ -559,7 +583,7 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   t3status.sample <- t3status.sample %>% rename(CID=`rownames(t3status.sample)`)
   
   
-  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+  merge <- condition.data.frame %>%
     filter(dateN=="9 weeks")%>%
     right_join(t3status.sample, by="CID")
   
@@ -580,7 +604,6 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
       }
     }
   }
-  merge <- merge %>% mutate_if(is.character, as.factor)
   speclist <- list()
   
   # calculate how often each one occurs and get proportions 
@@ -593,8 +616,21 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   for(i in 1:length(speclist)){
     test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
     colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
-    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
+    } else {
+      test.specs[[i]][1,1] <- NA
+    }
+    
+    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+    } else {
+      test.specs[[i]][1,2] <- NA
+    }
   }
   
   roct3 <- rbindlist(test.specs)
@@ -608,7 +644,7 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   t4status.sample <- t4status.sample %>% rename(CID=`rownames(t4status.sample)`)
   
   
-  merge <- mergekkcca %>% select(dateN, CID, data.condition.column) %>%
+  merge <- condition.data.frame %>%
     filter(dateN=="6 months")%>%
     right_join(t4status.sample, by="CID")
   
@@ -629,7 +665,6 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
       }
     }
   }
-  merge <- merge %>% mutate_if(is.character, as.factor)
   speclist <- list()
   
   # calculate how often each one occurs and get proportions 
@@ -642,8 +677,21 @@ diag_spec <- function(status.output, mergekkcca, data.condition.column ){
   for(i in 1:length(speclist)){
     test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
     colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    test.specs[[i]][1,1] <- speclist[[i]][4,2]/(speclist[[i]][4,2]+speclist[[i]][1,2])
-    test.specs[[i]][1,2] <- speclist[[i]][2,2]/(speclist[[i]][3,2]+speclist[[i]][2,2])
+    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
+    } else {
+      test.specs[[i]][1,1] <- NA
+    }
+    
+    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+    } else {
+      test.specs[[i]][1,2] <- NA
+    }
   }
   
   roct4 <- rbindlist(test.specs)
