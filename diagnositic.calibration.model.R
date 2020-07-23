@@ -353,43 +353,43 @@ getCCAChildIDsgscore <- function(nameFile){
 #### sort model output into time steps ####
 
 time.steps <- function(model.output){
-  require(reshape2)
+  
   t1 <- as.data.frame(model.output[,1:210])
   t2 <- as.data.frame(model.output[,211:420])
   t3 <- as.data.frame(model.output[,421:630])
   t4 <- as.data.frame(model.output[,631:840])
   
   t1[nrow(t1)+1,] <- colSums(t1)
-  t1[nrow(t1),] <- t1[nrow(t1),]/20000
+  t1[nrow(t1),] <- t1[nrow(t1),]/40000
   
-  t1.means <- as.data.frame(t1[20001,1:210])
+  t1.means <- as.data.frame(t1[nrow(t1),1:210])
   
   t1.means$time <-as.factor("Baseline")
   
   T1 <- melt(t1.means)
   
   t2[nrow(t2)+1,] <- colSums(t2)
-  t2[nrow(t2),] <- t2[nrow(t2),]/20000
+  t2[nrow(t2),] <- t2[nrow(t2),]/40000
   
-  t2.means <- as.data.frame(t2[20001,1:210])
+  t2.means <- as.data.frame(t2[nrow(t2),1:210])
   
   t2.means$time <-as.factor("ThreeWeeks")
   
   T2 <- melt(t2.means)
   
   t3[nrow(t3)+1,] <- colSums(t3)
-  t3[nrow(t3),] <- t3[nrow(t3),]/20000
+  t3[nrow(t3),] <- t3[nrow(t3),]/40000
   
-  t3.means <- as.data.frame(t3[20001,1:210])
+  t3.means <- as.data.frame(t3[nrow(t3),1:210])
   
   t3.means$time <- as.factor("NineWeeks")
   
   T3 <- melt(t3.means)
   
   t4[nrow(t4)+1,] <- colSums(t4)
-  t4[nrow(t4),] <- t4[nrow(t4),]/20000
+  t4[nrow(t4),] <- t4[nrow(t4),]/40000
   
-  t4.means <- as.data.frame(t4[20001,1:210])
+  t4.means <- as.data.frame(t4[nrow(t4),1:210])
   
   t4.means$time <- as.factor("SixMonths")
   
@@ -462,10 +462,9 @@ diag_spec <- function(status.output, condition.data.frame ){
   
   # join to the kkpos
   merge <- condition.data.frame %>%
-    filter(dateN=="Pre-T")%>%
-    right_join(t1status.sample, by="CID")
+    right_join(t1status.sample, by="CID")%>%
+    filter(dateN=="Pre-T")
   
-  merge <- merge[-which(is.na(merge$dateN)==T),]
   merge <- merge[!duplicated(merge[,"CID"]),]  
   
   # get the sensitivity/ specificity 
@@ -503,9 +502,9 @@ diag_spec <- function(status.output, condition.data.frame ){
     }
     
     if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
     } else {
       test.specs[[i]][1,2] <- NA
     }
@@ -523,10 +522,9 @@ diag_spec <- function(status.output, condition.data.frame ){
   
   
   merge <- condition.data.frame %>%
-    filter(dateN=="3 weeks")%>%
-    right_join(t2status.sample, by="CID")
+    right_join(t2status.sample, by="CID")%>%
+    filter(dateN=="3 weeks")
   
-  merge <- merge[-which(is.na(merge$dateN)==T),]
   merge <- merge[!duplicated(merge[,"CID"]),]  
   
   # get the sensitivity/ specificity 
@@ -564,9 +562,9 @@ diag_spec <- function(status.output, condition.data.frame ){
     }
     
     if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
     } else {
       test.specs[[i]][1,2] <- NA
     }
@@ -584,10 +582,9 @@ diag_spec <- function(status.output, condition.data.frame ){
   
   
   merge <- condition.data.frame %>%
-    filter(dateN=="9 weeks")%>%
-    right_join(t3status.sample, by="CID")
+    right_join(t3status.sample, by="CID")%>%
+    filter(dateN=="9 weeks")
   
-  merge <- merge[-which(is.na(merge$dateN)==T),]
   merge <- merge[!duplicated(merge[,"CID"]),]  
   
   # get the sensitivity/ specificity 
@@ -625,9 +622,9 @@ diag_spec <- function(status.output, condition.data.frame ){
     }
     
     if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
     } else {
       test.specs[[i]][1,2] <- NA
     }
@@ -645,10 +642,9 @@ diag_spec <- function(status.output, condition.data.frame ){
   
   
   merge <- condition.data.frame %>%
-    filter(dateN=="6 months")%>%
-    right_join(t4status.sample, by="CID")
+    right_join(t4status.sample, by="CID")%>%
+    filter(dateN=="6 months")
   
-  merge <- merge[-which(is.na(merge$dateN)==T),]
   merge <- merge[!duplicated(merge[,"CID"]),]  
   
   # get the sensitivity/ specificity 
@@ -686,9 +682,9 @@ diag_spec <- function(status.output, condition.data.frame ){
     }
     
     if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- 1-(speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
+    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
+      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
     } else {
       test.specs[[i]][1,2] <- NA
     }
@@ -702,6 +698,220 @@ diag_spec <- function(status.output, condition.data.frame ){
   return(rocalltime)
 }
 
+
+diag_spec2 <- function(status.sample, condition.data.frame ){
+  
+  t1 <- as.data.frame(status.sample[,1:210])
+  t2 <- as.data.frame(status.sample[,211:420])
+  t3 <- as.data.frame(status.sample[,421:630])
+  t4 <- as.data.frame(status.sample[,631:840])
+  
+  colnames(t1) <- CID
+  colnames(t2) <- CID
+  colnames(t3) <- CID
+  colnames(t4) <- CID
+  
+  t1 <- t(t1)
+  t2 <- t(t2)
+  t3 <- t(t3)
+  t4 <- t(t4)
+  
+  t1 <- as.data.frame(cbind(rownames(t1), data.frame(t1, row.names=NULL)))
+  t1 <- t1 %>% rename(CID=`rownames(t1)`)
+  
+  t2 <- as.data.frame(cbind(rownames(t2), data.frame(t2, row.names=NULL)))
+  t2 <- t2 %>% rename(CID=`rownames(t2)`)
+  
+  t3 <- as.data.frame(cbind(rownames(t3), data.frame(t3, row.names=NULL)))
+  t3 <- t3 %>% rename(CID=`rownames(t3)`)
+  
+  t4 <- as.data.frame(cbind(rownames(t4), data.frame(t4, row.names=NULL)))
+  t4 <- t4 %>% rename(CID=`rownames(t4)`)
+
+  
+  # join to the condition
+  merge <- condition.data.frame %>%
+    right_join(t1, by="CID")%>%
+    filter(dateN=="Pre-T")
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  
+  # calculate how often each one occurs and get proportions 
+  speclist <- list()
+  
+  for(i in 4:ncol(merge)){
+    merge[,i] <- factor(merge[,i], levels=c("TP", "FP", "FN", "TN"))
+  }
+  
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <- table(merge[,i])
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    
+    test.specs[[i]][1,1] <- speclist[[i]][[1]]/(speclist[[i]][[1]]+speclist[[i]][[3]])
+    test.specs[[i]][1,2] <- speclist[[i]][[2]]/(speclist[[i]][[2]]+speclist[[i]][[4]])
+  }
+  
+  roct1 <- rbindlist(test.specs)
+  roct1 <- roct1 %>% mutate(time = "pre-T")%>% mutate_if(is.character, as.factor)
+  
+  # 2nd time point 
+  
+  merge <- condition.data.frame %>%
+    right_join(t2, by="CID")%>%
+    filter(dateN=="3 weeks")
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  speclist <- list()
+  
+  # calculate how often each one occurs and get proportions 
+  speclist <- list()
+  
+  for(i in 4:ncol(merge)){
+    merge[,i] <- factor(merge[,i], levels=c("TP", "FP", "FN", "TN"))
+  }
+  
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <- table(merge[,i])
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    
+    test.specs[[i]][1,1] <- speclist[[i]][[1]]/(speclist[[i]][[1]]+speclist[[i]][[3]])
+    test.specs[[i]][1,2] <- speclist[[i]][[2]]/(speclist[[i]][[2]]+speclist[[i]][[4]])
+  }
+
+  roct2 <- rbindlist(test.specs)
+  roct2 <- roct2 %>% mutate(time = "3 weeks")%>%mutate_if(is.character, as.factor)
+  
+  # 3rd time point 
+
+  merge <- condition.data.frame %>%
+    right_join(t3, by="CID")%>%
+    filter(dateN=="9 weeks")
+  
+  merge <- merge[!duplicated(merge[,"CID"]),]  
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  
+  speclist <- list()
+  
+  for(i in 4:ncol(merge)){
+    merge[,i] <- factor(merge[,i], levels=c("TP", "FP", "FN", "TN"))
+  }
+  
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <- table(merge[,i])
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    
+    test.specs[[i]][1,1] <- speclist[[i]][[1]]/(speclist[[i]][[1]]+speclist[[i]][[3]])
+    test.specs[[i]][1,2] <- speclist[[i]][[2]]/(speclist[[i]][[2]]+speclist[[i]][[4]])
+  }
+  
+  roct3 <- rbindlist(test.specs)
+  roct3 <- roct3 %>% mutate(time = "9 weeks")%>%mutate_if(is.character, as.factor)
+  
+  # 4th time point 
+
+  merge <- condition.data.frame %>%
+    right_join(t4, by="CID")%>%
+    filter(dateN=="6 months")
+  
+  merge <- merge[!duplicated(merge[,"CID"]),]  
+  
+  # get the sensitivity/ specificity 
+  for(i in 1:nrow(merge)){
+    for(c in 4:ncol(merge)){
+      if(merge[i,3]==1 & merge[i,c]==1){
+        merge[i,c] <- "TP"   
+      } else if(merge[i,3]==1 & merge[i,c]==0){
+        merge[i,c] <- "FP"
+      } else if(merge[i,3]==0 & merge[i,c]==0){
+        merge[i,c] <- "TN" 
+      } else {
+        merge[i,c] <- "FN" 
+      }
+    }
+  }
+  
+  # get the sensitivity/ specificity 
+  speclist <- list()
+  
+  for(i in 4:ncol(merge)){
+    merge[,i] <- factor(merge[,i], levels=c("TP", "FP", "FN", "TN"))
+  }
+  
+  for(i in 4:ncol(merge)){
+    speclist[[i-3]] <- table(merge[,i])
+  }
+  
+  test.specs<- list()
+  for(i in 1:length(speclist)){
+    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+    colnames(test.specs[[i]]) <- c("TPR", "FPR")
+    
+    test.specs[[i]][1,1] <- speclist[[i]][[1]]/(speclist[[i]][[1]]+speclist[[i]][[3]])
+    test.specs[[i]][1,2] <- speclist[[i]][[2]]/(speclist[[i]][[2]]+speclist[[i]][[4]])
+  }
+  
+  roct4 <- rbindlist(test.specs)
+  roct4 <- roct4 %>% mutate(time = "6 months")%>%mutate_if(is.character, as.factor)
+  
+  
+  rocalltime <- bind_rows(roct1, roct2, roct3, roct4)
+  return(rocalltime)
+}
 
 
 

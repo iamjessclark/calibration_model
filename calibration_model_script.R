@@ -183,7 +183,7 @@ polygon(x=polygonx, y=polygony, col=adjustcolor("grey", alpha.f=0.4), border=NA)
 lines(kkgscorequantiles$`2.5%`, col="darkred", lwd=1) 
 polygon(x=polygonxgscore, y=polygonygscore, col=adjustcolor("grey", alpha.f=0.4), border=NA)
 
-add_legend("top", legend=c(c("KK & CCA (normal)", "KK & G-Score")), lty=1, lwd=2,
+add_legend("top", legend=c(c("Plus (+)", "G-Score")), lty=1, lwd=2,
            col=c("orange","darkred"),
            horiz=TRUE, bty='n', cex=1)
 dev.copy(pdf, "logcurve.confint.pdf", height = 6, width = 6)
@@ -217,8 +217,23 @@ prob.inf.kkgscore <- qplot(value, data = status.time.KKgscore, geom = "histogram
   theme_bw()+coord_cartesian(ylim=c(0, 200), xlim=c(0,1))+theme(legend.position = "none")+
   ylab("Number of Hosts") + xlab("Probability of Being Infected")
 
-prob.inf.kk
+prob.inf.kkgscore
 dev.off()
+
+status.time.KKcca <- status.time.KKcca %>% mutate(diagnostic="Plus(+)")
+status.time.KKgscore <- status.time.KKgscore %>% mutate(diagnostic="G-Score")
+status.time.KK <- status.time.KK %>% mutate(diagnostic="Kato-Katz")
+
+probinfdf <- bind_rows(status.time.KKcca,status.time.KKgscore, status.time.KK )%>%
+  mutate_if(is.character, as.factor)
+
+prob.inf.all.plot <- ggplot(data=probinfdf)+
+  geom_histogram(bins=10, aes(x=value, fill=diagnostic), position="dodge")+
+  facet_grid(time~.)+
+  scale_fill_viridis_d(option = "plasma")+
+  ylab("Number of Children") + xlab("Probability of Being Infected")+
+  theme_bw()+
+  ggsave("prob.inf.all.pdf")
 
 #### raw data plots ####
 
@@ -305,19 +320,23 @@ mergekkcca$intcat <- factor(mergekkcca$intcat, levels = c("zero_count", "low", "
 corr.diag.plot <- ggplot(data=mergekkcca, aes(x=gscore, y=Poppy))+
   geom_jitter(aes(colour=intcat), size=2)+
   facet_grid(dateN~.)+
-  labs(colour="Intensity Categories", y="CCA Standard", x="G-Score")+
+  labs(colour="Intensity Categories", y="Plus (+) Score", x="G-Score")+
   scale_colour_viridis(discrete=TRUE) +
+  theme_bw()+
+  scale_x_continuous(breaks=c(1:10,1))+
   ggsave("corr.diag.plot.raw.pdf")
   
 #### Sensitivity and specificity ROC plot ####
 mergekkcca$CID <- factor(mergekkcca$CID)
 mergekkcca$gscore <- as.numeric(mergekkcca$gscore)
 mergekkcca <- mergekkcca %>% mutate(kkpos = ifelse(mean.epg>0, 1, 0), 
+                                    ccanegpos = 1,
                                     ccaTpos = ifelse(Poppy == "Trace" |Poppy ==  "+" | Poppy == "++" |Poppy == "+++", 1,0),
                                     cca1pos = ifelse(Poppy == "+" |Poppy ==  "++" |Poppy == "+++", 1,0),
                                     cca2pos = ifelse(Poppy == " ++" |Poppy == "+++", 1,0),
                                     cca3pos = ifelse(Poppy == "+++", 1,0),
-                                    gscore2pos = ifelse(gscore>=2, 1, 1), 
+                                    gscore1pos = ifelse(gscore>=1, 1, 0), 
+                                    gscore2pos = ifelse(gscore>=2, 1, 0), 
                                     gscore3pos = ifelse(gscore>=3, 1, 0), 
                                     gscore4pos = ifelse(gscore>=4, 1, 0), 
                                     gscore5pos = ifelse(gscore>=5, 1, 0), 
@@ -329,30 +348,56 @@ mergekkcca <- mergekkcca %>% mutate(kkpos = ifelse(mean.epg>0, 1, 0),
 
 
 #kato katz model #
-kkt1 <- as.data.frame(status[,1:210])
-kkt2 <- as.data.frame(status[,211:420])
-kkt3 <- as.data.frame(status[,421:630])
-kkt4 <- as.data.frame(status[,631:840])
+
+kk.sample <- status[sample.int(nrow(status), 500, replace=FALSE, prob=NULL),]
+kkt1 <- as.data.frame(kk.sample[,1:210])
+kkt2 <- as.data.frame(kk.sample[,211:420])
+kkt3 <- as.data.frame(kk.sample[,421:630])
+kkt4 <- as.data.frame(kk.sample[,631:840])
 
 colnames(kkt1) <- CID
 colnames(kkt2) <- CID
 colnames(kkt3) <- CID
 colnames(kkt4) <- CID
 
-# t1sample 500 random particals 
-kkt1status.sample <- kkt1[sample.int(nrow(kkt1), 500, replace=FALSE, prob=NULL),]
-kkt1status.sample <- t(kkt1status.sample)
-kkt1status.sample <- as.data.frame(cbind(rownames(kkt1status.sample), data.frame(kkt1status.sample, row.names=NULL)))
-kkt1status.sample <- kkt1status.sample %>% rename(CID=`rownames(kkt1status.sample)`)
+kkt1 <- t(kkt1)
+kkt2 <- t(kkt2)
+kkt3 <- t(kkt3)
+kkt4 <- t(kkt4)
 
-# join to the kkpos
+# this turns row names into the column of CIDs
+kkt1 <- as.data.frame(cbind(rownames(kkt1), data.frame(kkt1, row.names=NULL)))
+kkt1 <- kkt1 %>% rename(CID=`rownames(kkt1)`)
+
 mergepretkk <- mergekkcca %>% select(dateN, CID, kkpos) %>%
-                filter(dateN=="Pre-T")%>%
-                  right_join(kkt1status.sample, by="CID")
-
+  right_join(kkt1, by="CID")%>%
+  filter(dateN=="Pre-T")
 # remove duplicates
-mergepretkk <- mergepretkk[-which(is.na(mergepretkk$kkpos)==T),]
-mergepretkk <- mergepretkk[!duplicated(mergepretkk[,"CID"]),]
+
+kkt2 <- as.data.frame(cbind(rownames(kkt2), data.frame(kkt2, row.names=NULL)))
+kkt2 <- kkt2 %>% rename(CID=`rownames(kkt2)`)
+
+mergekk3wk <- mergekkcca %>% select(dateN, CID, kkpos) %>%
+  right_join(kkt2, by="CID")%>%
+  filter(dateN=="3 weeks")
+# remove duplicates
+
+kkt3 <- as.data.frame(cbind(rownames(kkt3), data.frame(kkt3, row.names=NULL)))
+kkt3 <- kkt3 %>% rename(CID=`rownames(kkt3)`)
+
+mergekk9wk <- mergekkcca %>% select(dateN, CID, kkpos) %>%
+  right_join(kkt3, by="CID")%>%
+  filter(dateN=="9 weeks")
+# remove duplicates
+
+kkt4 <- as.data.frame(cbind(rownames(kkt4), data.frame(kkt4, row.names=NULL)))
+kkt4 <- kkt4 %>% rename(CID=`rownames(kkt4)`)
+
+mergekk6m <- mergekkcca %>% select(dateN, CID, kkpos) %>%
+  right_join(kkt4, by="CID")%>%
+  filter(dateN=="6 months")
+# remove duplicates
+
 
 # get the sensitivity/ specificity 
 for(i in 1:nrow(mergepretkk)){
@@ -373,34 +418,40 @@ mergepretkk <- mergepretkk %>% mutate_if(is.character, as.factor)
 pretkklist <- list()
 
 # calculate how often each one occurs and get proportions 
+
+table(factor(mergepretkk$X9353))
+
 for(i in 4:ncol(mergepretkk)){
   pretkklist[[i-3]] <-  mergepretkk %>% group_by(mergepretkk[,i]) %>% tally() %>%
                         mutate(proportion = n/sum(n))
 }
 
-test.specs.kk <- list()
+test.specs.t1 <- list()
 for(i in 1:length(pretkklist)){
-  test.specs.kk[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-  colnames(test.specs.kk[[i]]) <- c("TPR", "FPR")
-  test.specs.kk[[i]][1,1] <- pretkklist[[i]][4,2]/(pretkklist[[i]][4,2]+pretkklist[[i]][1,2])
-  test.specs.kk[[i]][1,2] <- pretkklist[[i]][2,2]/(pretkklist[[i]][3,2]+pretkklist[[i]][2,2])
+  test.specs.t1[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+  colnames(test.specs.t1[[i]]) <- c("TPR", "FPR")
+  
+  if("TP" %in% pretkklist[[i]]$ `mergepretkk[, i]` == TRUE && "FN" %in% pretkklist[[i]]$ `mergepretkk[, i]` == TRUE){
+    test.specs.t1[[i]][1,1] <- pretkklist[[i]][[which(pretkklist[[i]]=="TP"),2]]/(pretkklist[[i]][[which(pretkklist[[i]]=="TP"),2]]+pretkklist[[i]][[which(pretkklist[[i]]=="FN"),2]])
+  } else if("TP" %in% pretkklist[[i]]$ `mergepretkk[, i]`  == TRUE && "FN" %in% pretkklist[[i]]$ `mergepretkk[, i]` ==FALSE){
+    test.specs.t1[[i]][1,1] <- pretkklist[[i]][[which(pretkklist[[i]]=="TP"),2]]/(pretkklist[[i]][[which(pretkklist[[i]]=="TP"),2]]+0)
+  } else {
+    test.specs.t1[[i]][1,1] <- NA
+  }
+  
+  if("FP" %in% pretkklist[[i]]$ `mergepretkk[, i]` == TRUE && "TN" %in% pretkklist[[i]]$ `mergepretkk[, i]` ==TRUE){
+    test.specs.t1[[i]][1,2] <- (pretkklist[[i]][[which(pretkklist[[i]]=="FP"),2]]/(pretkklist[[i]][[which(pretkklist[[i]]=="TN"),2]]+pretkklist[[i]][[which(pretkklist[[i]]=="FP"),2]]))
+  } else if("FP" %in% pretkklist[[i]]$ `mergepretkk[, i]`  == TRUE && "TN" %in% pretkklist[[i]]$ `mergepretkk[, i]` ==FALSE){
+    test.specs.t1[[i]][1,2] <- (pretkklist[[i]][[which(pretkklist[[i]]=="FP"),2]]/(pretkklist[[i]][[which(pretkklist[[i]]=="FP"),2]]+0))
+  } else {
+    test.specs.t1[[i]][1,2] <- NA
+  }
 }
 
-roc.pretkk <- rbindlist(test.specs.kk)
+roc.pretkk <- rbindlist(test.specs.t1)
 roc.pretkk <- roc.pretkk %>% mutate(time = "pre-T")%>%mutate_if(is.character, as.factor)
 
-# t2sample 500 random particals 
-kkt2status.sample <- kkt2[sample.int(nrow(kkt2), 500, replace=FALSE, prob=NULL),]
-kkt2status.sample <- t(kkt2status.sample)
-kkt2status.sample <- as.data.frame(cbind(rownames(kkt2status.sample), data.frame(kkt2status.sample, row.names=NULL)))
-kkt2status.sample <- kkt2status.sample %>% rename(CID=`rownames(kkt2status.sample)`)
-
-mergekk3wk <- mergekkcca %>% select(dateN, CID, kkpos) %>%
-  filter(dateN=="3 weeks")%>%
-  right_join(kkt2status.sample, by="CID")
-mergekk3wk <- mergekk3wk[-which(is.na(mergekk3wk$kkpos)==T),]
-mergekk3wk <- mergekk3wk[!duplicated(mergekk3wk[,"CID"]),]
-
+# 3wk
 # get the sensitivity/ specificity 
 for(i in 1:nrow(mergekk3wk)){
   for(c in 4:ncol(mergekk3wk)){
@@ -417,38 +468,40 @@ for(i in 1:nrow(mergekk3wk)){
 }
 
 mergekk3wk <- mergekk3wk %>% mutate_if(is.character, as.factor)
-wk3kklist <- list()
+kk3wklist <- list()
 
 # calculate how often each one occurs and get proportions 
 for(i in 4:ncol(mergekk3wk)){
-  wk3kklist[[i-3]] <-  mergekk3wk %>% group_by(mergekk3wk[,i]) %>% tally() %>%
+  kk3wklist[[i-3]] <-  mergekk3wk %>% group_by(mergekk3wk[,i]) %>% tally() %>%
     mutate(proportion = n/sum(n))
 }
 
-test.specs.wk3kk <- list()
-for(i in 1:length(wk3kklist)){
-  test.specs.wk3kk[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-  colnames(test.specs.wk3kk[[i]]) <- c("TPR", "FPR")
-  test.specs.wk3kk[[i]][1,1] <- wk3kklist[[i]][4,2]/(wk3kklist[[i]][4,2]+wk3kklist[[i]][1,2])
-  test.specs.wk3kk[[i]][1,2] <- wk3kklist[[i]][2,2]/(wk3kklist[[i]][3,2]+wk3kklist[[i]][2,2])
+test.specs.kk <- list()
+for(i in 1:length(kk3wklist)){
+  test.specs.kk[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+  colnames(test.specs.kk[[i]]) <- c("TPR", "FPR")
+  if("TP" %in% kk3wklist[[i]]$ `mergekk3wk[, i]` == TRUE && "FN" %in% kk3wklist[[i]]$ `mergekk3wk[, i]` == TRUE){
+    test.specs.kk[[i]][1,1] <- kk3wklist[[i]][[which(kk3wklist[[i]]=="TP"),2]]/(kk3wklist[[i]][[which(kk3wklist[[i]]=="TP"),2]]+kk3wklist[[i]][[which(kk3wklist[[i]]=="FN"),2]])
+  } else if("TP" %in% kk3wklist[[i]]$ `mergekk3wk[, i]`  == TRUE && "FN" %in% kk3wklist[[i]]$ `mergekk3wk[, i]` ==FALSE){
+    test.specs.kk[[i]][1,1] <- kk3wklist[[i]][[which(kk3wklist[[i]]=="TP"),2]]/(kk3wklist[[i]][[which(kk3wklist[[i]]=="TP"),2]]+0)
+  } else {
+    test.specs.kk[[i]][1,1] <- NA
+  }
+  
+  if("FP" %in% kk3wklist[[i]]$ `mergekk3wk[, i]` == TRUE && "TN" %in% kk3wklist[[i]]$ `mergekk3wk[, i]` ==TRUE){
+    test.specs.kk[[i]][1,2] <- (kk3wklist[[i]][[which(kk3wklist[[i]]=="FP"),2]]/(kk3wklist[[i]][[which(kk3wklist[[i]]=="TN"),2]]+kk3wklist[[i]][[which(kk3wklist[[i]]=="FP"),2]]))
+  } else if("FP" %in% kk3wklist[[i]]$ `mergekk3wk[, i]`  == TRUE && "TN" %in% kk3wklist[[i]]$ `mergekk3wk[, i]` ==FALSE){
+    test.specs.kk[[i]][1,2] <- (kk3wklist[[i]][[which(kk3wklist[[i]]=="FP"),2]]/(kk3wklist[[i]][[which(kk3wklist[[i]]=="FP"),2]]+0))
+  } else {
+    test.specs.kk[[i]][1,2] <- NA
+  }
 }
 
-roc.3wk <- rbindlist(test.specs.wk3kk)
-roc.3wk <- roc.3wk %>% mutate(time = "3 weeks")%>%mutate_if(is.character, as.factor)
-# t3sample 500 random particals 
-kkt3status.sample <- kkt3[sample.int(nrow(kkt3), 500, replace=FALSE, prob=NULL),]
-kkt3status.sample <- t(kkt3status.sample)
-kkt3status.sample <- as.data.frame(cbind(rownames(kkt3status.sample), data.frame(kkt3status.sample, row.names=NULL)))
-kkt3status.sample <- kkt3status.sample %>% rename(CID=`rownames(kkt3status.sample)`)
+roc.kk3wk <- rbindlist(test.specs.kk)
+roc.kk3wk <- roc.kk3wk %>% mutate(time = "3 weeks")%>%mutate_if(is.character, as.factor)
 
-mergekk9wk <- mergekkcca %>% select(dateN, CID, kkpos) %>%
-  filter(dateN=="3 weeks")%>%
-  right_join(kkt3status.sample, by="CID")
+# 9wk
 
-mergekk9wk <- mergekk9wk[-which(is.na(mergekk9wk$kkpos)==T),]
-mergekk9wk <- mergekk9wk[!duplicated(mergekk9wk[,"CID"]),]
-
-# get the sensitivity/ specificity 
 for(i in 1:nrow(mergekk9wk)){
   for(c in 4:ncol(mergekk9wk)){
     if(mergekk9wk[i,3]==1 & mergekk9wk[i,c]==1){
@@ -464,40 +517,40 @@ for(i in 1:nrow(mergekk9wk)){
 }
 
 mergekk9wk <- mergekk9wk %>% mutate_if(is.character, as.factor)
-wk9kklist <- list()
+kk9wklist <- list()
 
 # calculate how often each one occurs and get proportions 
 for(i in 4:ncol(mergekk9wk)){
-  wk9kklist[[i-3]] <-  mergekk9wk %>% group_by(mergekk9wk[,i]) %>% tally() %>%
+  kk9wklist[[i-3]] <-  mergekk9wk %>% group_by(mergekk9wk[,i]) %>% tally() %>%
     mutate(proportion = n/sum(n))
 }
 
-test.specs.wk9kk <- list()
-for(i in 1:length(wk9kklist)){
-  test.specs.wk9kk[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-  colnames(test.specs.wk9kk[[i]]) <- c("TPR", "FPR")
-  test.specs.wk9kk[[i]][1,1] <- wk9kklist[[i]][4,2]/(wk9kklist[[i]][4,2]+wk9kklist[[i]][1,2])
-  test.specs.wk9kk[[i]][1,2] <- wk9kklist[[i]][2,2]/(wk9kklist[[i]][3,2]+wk9kklist[[i]][2,2])
+test.specs.kk <- list()
+for(i in 1:length(kk9wklist)){
+  test.specs.kk[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+  colnames(test.specs.kk[[i]]) <- c("TPR", "FPR")
+  if("TP" %in% kk9wklist[[i]]$ `mergekk9wk[, i]` == TRUE && "FN" %in% kk9wklist[[i]]$ `mergekk9wk[, i]` == TRUE){
+    test.specs.kk[[i]][1,1] <- kk9wklist[[i]][[which(kk9wklist[[i]]=="TP"),2]]/(kk9wklist[[i]][[which(kk9wklist[[i]]=="TP"),2]]+kk9wklist[[i]][[which(kk9wklist[[i]]=="FN"),2]])
+  } else if("TP" %in% kk9wklist[[i]]$ `mergekk9wk[, i]`  == TRUE && "FN" %in% kk9wklist[[i]]$ `mergekk9wk[, i]` ==FALSE){
+    test.specs.kk[[i]][1,1] <- kk9wklist[[i]][[which(kk9wklist[[i]]=="TP"),2]]/(kk9wklist[[i]][[which(kk9wklist[[i]]=="TP"),2]]+0)
+  } else {
+    test.specs.kk[[i]][1,1] <- NA
+  }
+  
+  if("FP" %in% kk9wklist[[i]]$ `mergekk9wk[, i]` == TRUE && "TN" %in% kk9wklist[[i]]$ `mergekk9wk[, i]` ==TRUE){
+    test.specs.kk[[i]][1,2] <- (kk9wklist[[i]][[which(kk9wklist[[i]]=="FP"),2]]/(kk9wklist[[i]][[which(kk9wklist[[i]]=="TN"),2]]+kk9wklist[[i]][[which(kk9wklist[[i]]=="FP"),2]]))
+  } else if("FP" %in% kk9wklist[[i]]$ `mergekk9wk[, i]`  == TRUE && "TN" %in% kk9wklist[[i]]$ `mergekk9wk[, i]` ==FALSE){
+    test.specs.kk[[i]][1,2] <- (kk9wklist[[i]][[which(kk9wklist[[i]]=="FP"),2]]/(kk9wklist[[i]][[which(kk9wklist[[i]]=="FP"),2]]+0))
+  } else {
+    test.specs.kk[[i]][1,2] <- NA
+  }
 }
 
-roc.9wk <- rbindlist(test.specs.wk9kk)
-roc.9wk <- roc.9wk %>% mutate(time = "9 weeks")%>%mutate_if(is.character, as.factor)
+roc.kk9wk <- rbindlist(test.specs.kk)
+roc.kk9wk <- roc.kk9wk %>% mutate(time = "9 weeks")%>%mutate_if(is.character, as.factor)
 
-# t3sample 500 random particals 
-kkt4status.sample <- kkt4[sample.int(nrow(kkt4), 500, replace=FALSE, prob=NULL),]
-kkt4status.sample <- t(kkt4status.sample)
-kkt4status.sample <- as.data.frame(cbind(rownames(kkt4status.sample), data.frame(kkt4status.sample, row.names=NULL)))
-kkt4status.sample <- kkt4status.sample %>% rename(CID=`rownames(kkt4status.sample)`)
+# 6m
 
-mergekk6m <- mergekkcca %>% select(dateN, CID, kkpos) %>%
-  filter(dateN=="6 months")%>%
-  right_join(kkt4status.sample, by="CID")
-
-# remove duplicates
-mergekk6m <- mergekk6m[-which(is.na(mergekk6m$kkpos)==T),]
-mergekk6m <- mergekk6m[!duplicated(mergekk6m[,"CID"]),]
-
-# get the sensitivity/ specificity 
 for(i in 1:nrow(mergekk6m)){
   for(c in 4:ncol(mergekk6m)){
     if(mergekk6m[i,3]==1 & mergekk6m[i,c]==1){
@@ -513,30 +566,43 @@ for(i in 1:nrow(mergekk6m)){
 }
 
 mergekk6m <- mergekk6m %>% mutate_if(is.character, as.factor)
-sixmkklist <- list()
+kk6mlist <- list()
 
 # calculate how often each one occurs and get proportions 
 for(i in 4:ncol(mergekk6m)){
-  sixmkklist[[i-3]] <-  mergekk6m %>% group_by(mergekk6m[,i]) %>% tally() %>%
+  kk6mlist[[i-3]] <-  mergekk6m %>% group_by(mergekk6m[,i]) %>% tally() %>%
     mutate(proportion = n/sum(n))
 }
 
-test.specs.sixmkk <- list()
-for(i in 1:length(sixmkklist)){
-  test.specs.sixmkk[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-  colnames(test.specs.sixmkk[[i]]) <- c("TPR", "FPR")
-  test.specs.sixmkk[[i]][1,1] <- sixmkklist[[i]][4,2]/(sixmkklist[[i]][4,2]+sixmkklist[[i]][1,2])
-  test.specs.sixmkk[[i]][1,2] <- sixmkklist[[i]][2,2]/(sixmkklist[[i]][3,2]+sixmkklist[[i]][2,2])
+test.specs.kk <- list()
+for(i in 1:length(kk6mlist)){
+  test.specs.kk[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
+  colnames(test.specs.kk[[i]]) <- c("TPR", "FPR")
+  if("TP" %in% kk6mlist[[i]]$ `mergekk6m[, i]` == TRUE && "FN" %in% kk6mlist[[i]]$ `mergekk6m[, i]` == TRUE){
+    test.specs.kk[[i]][1,1] <- kk6mlist[[i]][[which(kk6mlist[[i]]=="TP"),2]]/(kk6mlist[[i]][[which(kk6mlist[[i]]=="TP"),2]]+kk6mlist[[i]][[which(kk6mlist[[i]]=="FN"),2]])
+  } else if("TP" %in% kk6mlist[[i]]$ `mergekk6m[, i]`  == TRUE && "FN" %in% kk6mlist[[i]]$ `mergekk6m[, i]` ==FALSE){
+    test.specs.kk[[i]][1,1] <- kk6mlist[[i]][[which(kk6mlist[[i]]=="TP"),2]]/(kk6mlist[[i]][[which(kk6mlist[[i]]=="TP"),2]]+0)
+  } else {
+    test.specs.kk[[i]][1,1] <- NA
+  }
+  
+  if("FP" %in% kk6mlist[[i]]$ `mergekk6m[, i]` == TRUE && "TN" %in% kk6mlist[[i]]$ `mergekk6m[, i]` ==TRUE){
+    test.specs.kk[[i]][1,2] <- (kk6mlist[[i]][[which(kk6mlist[[i]]=="FP"),2]]/(kk6mlist[[i]][[which(kk6mlist[[i]]=="TN"),2]]+kk6mlist[[i]][[which(kk6mlist[[i]]=="FP"),2]]))
+  } else if("FP" %in% kk6mlist[[i]]$ `mergekk6m[, i]`  == TRUE && "TN" %in% kk6mlist[[i]]$ `mergekk6m[, i]` ==FALSE){
+    test.specs.kk[[i]][1,2] <- (kk6mlist[[i]][[which(kk6mlist[[i]]=="FP"),2]]/(kk6mlist[[i]][[which(kk6mlist[[i]]=="FP"),2]]+0))
+  } else {
+    test.specs.kk[[i]][1,2] <- NA
+  }
 }
 
-roc.6m <- rbindlist(test.specs.sixmkk)
-roc.6m <- roc.6m %>% mutate(time = "6 months")%>%mutate_if(is.character, as.factor)
+roc.kk6m <- rbindlist(test.specs.kk)
+roc.kk6m <- roc.kk6m %>% mutate(time = "6 months")%>%mutate_if(is.character, as.factor)
 
-kk.spec <- bind_rows(roc.pretkk, roc.3wk, roc.9wk, roc.6m)%>% mutate_if(is.character, as.factor)
+kk.spec <- bind_rows(roc.pretkk, roc.kk3wk, roc.kk9wk, roc.kk6m)%>% mutate_if(is.character, as.factor)
 kk.spec$time <- factor(kk.spec$time, levels=c("pre-T", "3 weeks", "9 weeks", "6 months"))
 
 kk.spec.qtiles <- kk.spec %>% group_by(time) %>%
-                  summarise_at(vars(TPR, FPR),funs(!!!p_funs))
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs))
 
 kk.spec.plot <- ggplot()+
   geom_jitter(kk.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
@@ -544,142 +610,144 @@ kk.spec.plot <- ggplot()+
   ggsave("kkspecplot.pdf")
 
 #### CCA Model T positive ####
+cca.status.sample <- status.kkcca[sample.int(nrow(status.kkcca), 500, replace=FALSE, prob=NULL),]
+
+condition.data.frame <- mergekkcca %>% select(dateN, CID, ccanegpos)
+ccanegpos.spec <- diag_spec2(cca.status.sample, condition.data.frame) 
+specsensccaN <- ccanegpos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="negative")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, ccaTpos)
-ccaTpos.spec <- diag_spec(status.kkcca, condition.data.frame) 
-ccaTpos.spec$time <- factor(ccaTpos.spec$time, levels=c("pre-T", "3 weeks", "9 weeks", "6 months"))
+ccaTpos.spec <- diag_spec2(cca.status.sample, condition.data.frame) 
 specsensccaT <- ccaTpos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="trace")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, cca1pos)
-cca1pos.spec <- diag_spec(status.kkcca, condition.data.frame) 
+cca1pos.spec <- diag_spec2(cca.status.sample, condition.data.frame) 
 specsenscca1 <- cca1pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs))%>% 
   mutate(threshold="+")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, cca2pos)
-cca2pos.spec <- diag_spec(status.kkcca, condition.data.frame) 
+cca2pos.spec <- diag_spec2(cca.status.sample, condition.data.frame) 
 specsenscca2 <- cca2pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs))%>% 
   mutate(threshold="++")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, cca3pos)
-cca3pos.spec <- diag_spec(status.kkcca, condition.data.frame) 
+cca3pos.spec <- diag_spec2(cca.status.sample, condition.data.frame) 
 specsenscca3 <- cca3pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs))%>% 
   mutate(threshold="+++")
 
-ccasensspecquant <- bind_rows(specsensccaT,specsenscca1, specsenscca2, specsenscca2 )%>%
-  mutate_if(is.character, as.factor)
+ccasensspecquant <- bind_rows(specsensccaN, specsensccaT,specsenscca1, specsenscca2, specsenscca3 )%>%
+  mutate_if(is.character, as.factor)%>%
+  mutate(diagnostic="Plus(+)", threshold=factor(threshold, levels = c("negative", "trace", "+", "++", "+++")), 
+         time=factor(time, levels=c("pre-T", "3 weeks", "9 weeks", "6 months")))
 
 
-CCAT.spec.plot <- ggplot()+
-  geom_point(ccaTpos.spec, mapping=aes(x=FPR , y=TPR))+
-  geom_point(cca1pos.spec, mapping=aes(x=FPR , y=TPR))+
-  geom_point(cca2pos.spec, mapping=aes(x=FPR , y=TPR))+
-  geom_point(cca3pos.spec, mapping=aes(x=FPR , y=TPR))+
-  ylab("True Positive Rate") + xlab("False Positive Rate")
+cca.spec.plot <- ggplot()+
+  geom_ribbon(data=ccasensspecquant, aes(x=`FPR_50%`, ymin=`TPR_2.5%`, ymax=`TPR_97.5%`), fill="grey")+
+  geom_jitter(ccasensspecquant, mapping=aes(x=`FPR_50%` , y=`TPR_50%`, colour=threshold))+
+  facet_wrap(time~.)+
+  ylab("True Positive Rate") + xlab("False Positive Rate")+
+  theme_bw()+
+  ggsave("roc.cca.pdf")
 
+#### gscore ####
 
-CCAT.spec.plot <- ggplot()+
-  geom_point(ccasensspecquant, mapping=aes(x=`FPR_50%` , y=`TPR_50%`, colour=threshold, shape=time))+
-  geom_line()+
-  ylab("True Positive Rate") + xlab("False Positive Rate")
+gscore.status.sample <- status.kkgscore[sample.int(nrow(status.kkgscore), 500, replace=FALSE, prob=NULL),]
 
-polygonx <- c(ccasensspecquant$`FPR_50%`, rev(ccasensspecquant$`FPR_50%`))
-polygony <- c(ccasensspecquant$`TPR_2.5%`, rev(ccasensspecquant$`TPR_97.5%`))
-
-plot(NA,NA, xlim = c(0,1), ylim = c(0,1), xlab="False Positive Rate", ylab="True Positive Rate", cex.axis=1)
-lines(ccasensspecquant$`FPR_50%`~ccasensspecquant$`TPR_50%`, col="orange", lwd=2, lty = 1)
-polygon(x=polygonx, y=polygony, col=adjustcolor("grey", alpha.f=0.4), border=NA)
-
-add_legend("top", legend=c(c("KK & CCA (normal)", "KK & G-Score")), lty=1, lwd=2,
-           col=c("orange","darkred"),
-           horiz=TRUE, bty='n', cex=1)
-dev.copy(pdf, "logcurve.confint.pdf", height = 6, width = 6)
-dev.off()
-graphics.off()
-
-
-CCAT.spec.plot <- ggplot()+
-  geom_jitter(gscore2pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore3pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore4pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore5pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore6pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore7pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore8pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore9pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  geom_jitter(gscore10pos.spec, mapping=aes(x=FPR, y=TPR, colour=time))+
-  ylab("True Positive Rate") + xlab("False Positive Rate")
+condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore1pos)
+gscore1pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame)
+specsensgscore1 <- gscore1pos.spec %>% group_by(time) %>%
+  summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
+  mutate(threshold="G-Score1")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore2pos)
-gscore2pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+gscore2pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame)
 specsensgscore2 <- gscore2pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score2")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore3pos)
-gscore3pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+gscore3pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame) 
 specsensgscore3 <- gscore3pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score3")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore4pos)
-gscore4pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+gscore4pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame)
 specsensgscore4 <- gscore4pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score4")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore5pos)
-gscore5pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+gscore5pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame)
 specsensgscore5 <- gscore5pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score5")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore6pos)
-gscore6pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+gscore6pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame) 
 specsensgscore6 <- gscore6pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score6")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore7pos)
-gscore7pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+gscore7pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame)
 specsensgscore7 <- gscore7pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score7")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore8pos)
-gscore8pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+gscore8pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame) 
 specsensgscore8 <- gscore8pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score8")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore9pos)
-gscore9pos.spec <- diag_spec(status.kkgscore, condition.data.frame)
+gscore9pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame)
 specsensgscore9 <- gscore9pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score9")
 
 condition.data.frame <- mergekkcca %>% select(dateN, CID, gscore10pos)
-gscore10pos.spec <- diag_spec(status.kkgscore, condition.data.frame) 
+gscore10pos.spec <- diag_spec2(gscore.status.sample, condition.data.frame) 
 specsensgscore10 <- gscore10pos.spec %>% group_by(time) %>%
   summarise_at(vars(TPR, FPR),funs(!!!p_funs)) %>% 
   mutate(threshold="G-Score10")
 
-gscoresensspecquant <- bind_rows(specsensgscore2, specsensgscore3, specsensgscore4,
+gscoresensspecquant <- bind_rows(specsensgscore1, specsensgscore2, specsensgscore3, specsensgscore4,
                                  specsensgscore5, specsensgscore6, specsensgscore7, specsensgscore8, 
                                  specsensgscore9, specsensgscore10)%>% 
                         mutate(time=factor(time, levels=c("pre-T", "3 weeks", "9 weeks", "6 months")))%>%
-                        mutate(threshold=factor(threshold, levels=c("G-Score2","G-Score3","G-Score4","G-Score5","G-Score6","G-Score7","G-Score8","G-Score9","G-Score10")))
+                        mutate(threshold=factor(threshold, levels=c("G-Score1", "G-Score2","G-Score3","G-Score4","G-Score5","G-Score6","G-Score7","G-Score8","G-Score9","G-Score10")))%>%
+                        mutate(diagnostic="G-Score")
 
-gscoresensspecall <- bind_rows(gscore2pos.spec, gscore3pos.spec,gscore4pos.spec, gscore5pos.spec, gscore6pos.spec, gscore7pos.spec, gscore8pos.spec, gscore9pos.spec, gscore10pos.spec)
-
-gscore.spec.plot <- ggplot()+
-  geom_point(gscoresensspecquant, mapping=aes(x=`FPR_50%` , y=`TPR_50%`, colour=threshold))+
-  geom_line(data=gscoresensspecall, aes(x=FPR, y=TPR))+
-  geom_ribbon(data=gscoresensspecall, aes(ymin=TPR, ymax=))+
+gscore.roc <- ggplot()+
+  geom_ribbon(data=gscoresensspecquant, aes(x=`FPR_50%`, ymin=`TPR_2.5%`, ymax=`TPR_97.5%`),fill="grey", alpha=.6)+
+  geom_jitter(gscoresensspecquant, mapping=aes(x=`FPR_50%` , y=`TPR_50%`,  colour=threshold))+
   facet_wrap(time~.)+
-  ylab("True Positive Rate") + xlab("False Positive Rate")
+  ylab("Sensitivity") + xlab("False Positive Rate")+
+  theme_bw()+
+  ggsave("rocgscore.pdf")
+
+cca.roc <- ggplot()+
+  geom_ribbon(data=ccasensspecquant, aes(x=`FPR_50%`, ymin=`TPR_2.5%`, ymax=`TPR_97.5%`),fill="grey", alpha=.6)+
+  geom_jitter(ccasensspecquant, mapping=aes(x=`FPR_50%` , y=`TPR_50%`,  colour=threshold))+
+  facet_wrap(time~.)+
+  ylab("Sensitivity") + xlab("False Positive Rate")+
+  theme_bw()+
+  ggsave("roccca.pdf")
+
+
+
+
+
+
+
+
 
