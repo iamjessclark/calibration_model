@@ -1,19 +1,18 @@
 # Calibrating Schistosomiasis Diagnostics
-# Jessica Clark
+# Jessica Clark, JM Prada, P.H.L.Lamberton
 # Using the bayesian framework developed in the HMM to look at each time point independently
 # Status will not be tracked across time points but will be estimated independently
 
 # this is for just the KK data
 CalModKK <- function (N, Ti, R, KK) {
   ## Set seed ##
-  .RNG.seed <- function(chain)
+  .RN1G.seed <- function(chain)
     return( switch(chain, "1"= 1, "2"= 2) )
   .RNG.name <- function(chain)
     return( switch(chain, "1" = "base::Super-Duper", "2" = "base::Wichmann-Hill") )
   
   ## Initialize Status ##
   Status <- matrix(1,nrow=210, ncol=4)
-  sigma <-  0.001
   
   m <- "model {
     
@@ -24,11 +23,12 @@ CalModKK <- function (N, Ti, R, KK) {
     # Prior KKs #
     
     rtnb ~ dgamma(286.3235, 223.4650)
-    sigma ~ dgamma(0.001, 0.001)
     
-    tkksh ~ dgamma(83.88592,125.70331)
-    tkkrt1 ~ dbeta(47.13542,633.08366)
-    tkkrt <- tkkrt1/(1-tkkrt1)
+    for(t in 1:4){
+      tkksh[t] ~ dgamma(83.88592,125.70331)
+      tkkrt1[t] ~ dbeta(47.13542,633.08366)
+      tkkrt[t] <- tkkrt1[t]/(1-tkkrt1[t])
+    }
     
     # model 
     for(n in 1:N){	# run through pop
@@ -37,7 +37,7 @@ CalModKK <- function (N, Ti, R, KK) {
         Status[n,t] ~ dbern(prev)
         
         tKK[n,1,t] <- 0
-        tKK[n,2,t] ~ dgamma(tkksh, tkkrt)
+        tKK[n,2,t] ~ dgamma(tkksh[t], tkkrt[t])
         
         lambda[n,t] <- tKK[n,Status[n,t]+1,t] 
           
@@ -47,9 +47,9 @@ CalModKK <- function (N, Ti, R, KK) {
         } # end time
       } # end n loop
     
-    #inits# .RNG.seed, .RNG.name, Status, sigma
+    #inits# .RNG.seed, .RNG.name, Status
     #data# N, Ti, R, KK
-    #monitor# prev, rtnb, Status
+    #monitor# prev, rtnb, Status, tkksh, tkkrt
 }"
   
   
@@ -71,29 +71,72 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
   
   ## Initialize Status ##
   Status <- matrix(1,nrow=210, ncol=4)
-  sigma <-  0.001
   prob <- array(rep(CCA,2),dim=c(N,Ti,2))
   
   m <- "model {
-  # Prior prevalence / clearance / reinfection #
-  prev ~ dbeta(1,1)
-
+  # Prior prevalence #
+  
+  for(t in 1:4){
+    prev[t] ~ dbeta(1,1)
+  }
+  
   # Prior KKs 
   rtnb ~ dgamma(286.3235, 223.4650)
-      
-  tkksh ~ dgamma(83.88592,125.70331)
-  tkkrt1 ~ dbeta(47.13542,633.08366)
-  tkkrt <- tkkrt1/(1-tkkrt1)
-
+  
+  # make the mean sh/rt and sort them 
+  # shapes
+  
+  #ssh[1] ~ dgamma(83.88592,125.70331)
+  ssh[1] ~ dgamma(0.001,0.001)
+  
+  #ssh[2] ~ dgamma(20.57512,79.64904)
+  ssh[2] ~ dgamma(0.001,0.001)
+  
+  ssh[3] ~ dgamma(0.001, 0.001)
+  
+  #ssh[4] ~ dgamma(53.59118,138.86460)
+  ssh[4] ~ dgamma(0.001,0.001)
+  
+  # rates
+  
+  #srt1[1] ~ dbeta(47.13542,633.08366)
+  srt1[1] ~ dbeta(1,1)
+  srt[1] <- srt1[1]/(1-srt1[1])
+  
+  #srt2[2] ~ dbeta(6.946785,14.183304)
+  srt2[2] ~ dbeta(1,1)
+  srt[2] <- srt2[2]/(1-srt2[2])
+  
+  srt3[3] ~ dbeta(1,1)
+  srt[3] <- srt3[3]/(1-srt3[3])
+  
+  #srt4[4] ~ dbeta(17.86595,77.49737)
+  srt4[4] ~ dbeta(1,1)
+  srt[4] <- srt4[4]/(1-srt4[4])
+  
+  ind <- order(ssh/srt)
+  ptemp ~ dbern(0.5)
+  ptemp1 ~ dbern(0.5)
+  
+  tkksh[1] <- ssh[ind[ptemp1+3]] # baseline 1 
+  tkksh[2] <- ssh[ind[1+ptemp]] # 4w post - low
+  tkksh[3] <- ssh[ind[1+(1-ptemp)]] # 4w post - low
+  tkksh[4] <- ssh[ind[(1-ptemp1)+3]]
+  
+  tkkrt[1] <- srt[ind[ptemp1+3]] # baseline 1 
+  tkkrt[2] <- srt[ind[1+ptemp]] # 4w post - low
+  tkkrt[3] <- srt[ind[1+(1-ptemp)]] # 4w post - low
+  tkkrt[4] <- srt[ind[(1-ptemp1)+3]] # baseline 2
+  
   k ~ dgamma(0.001, 0.001)
-  intercept ~ dgamma(0.001, 0.001)
+  intercept ~ dnorm(0, 10^-6)
   
   # MODEL 
   for(n in 1:N){	# run through pop
     
     for (t in 1:Ti){ # run through timepoints
       
-      Status[n,t] ~ dbern(prev)
+      Status[n,t] ~ dbern(prev[t])
       
       lambda[n,t] <- tKK[n,Status[n,t]+1,t] # this needs to go here because each time the r loop reiterates it will replace this value
         
@@ -103,19 +146,19 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
 
     
       tKK[n,1,t] <- 0                                                                                                                                                                                                                                                                                               
-      tKK[n,2,t] ~ dgamma(tkksh, tkkrt)
+      tKK[n,2,t] ~ dgamma(tkksh[t], tkkrt[t])
       
-      prob[n,t,1] ~ dnorm(0,3.093451)
-      prob[n,t,2] ~ dnorm(4 / (1 + exp(-k*(tKK[n,2,t]-intercept))),3.093451)
-       
+      prob[n,t,1]~ dnorm(0,1.863282)T(0,4)
+      prob[n,t,2] ~ dnorm(4 / (1 + exp(-k*(tKK[n,2,t]-intercept))), 3.47182)
+      #3.093451  
       CCA[n,t] ~ dround(prob[n,t,Status[n,t]+1],0)
       
-      } # end timestep 1 t loop
+      } # end timestep t loop
     } #N
   
-  #inits# .RNG.seed, .RNG.name, Status, sigma, prob   
+  #inits# .RNG.seed, .RNG.name, Status, prob   
   #data# N, Ti, R, KK, CCA
-  #monitor#  rtnb, prev, k, intercept, Status
+  #monitor#  rtnb, tkksh, tkkrt, prev, k, intercept, Status
 }"
   
   # Run model #
@@ -137,29 +180,72 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
   ## Initialize Status ##
   Status <- matrix(1,nrow=210, ncol=4)
   prob <- array(rep(CCA10,2),dim=c(N,Ti,2))
-  sigma<- 0.001
   
   m <- "model {
   
   # MODEL 
    # Prior prevalence #
-    prev ~ dbeta(1,1)
+    
+    for(t in 1:4){
+      prev[t] ~ dbeta(1,1)
+    }
    
     # Prior KKs 
-    rtnb ~ dgamma(286.3235, 223.4650)
-
-    tkksh ~ dgamma(0.001, 0.001)
-    tkkrt1 ~ dbeta(1,1)
-    tkkrt <- tkkrt1/(1-tkkrt1)
+  rtnb ~ dgamma(286.3235, 223.4650)
+  
+  # make the mean sh/rt and sort them 
+  # shapes
+  
+  #ssh[1] ~ dgamma(83.88592,125.70331)
+  ssh[1] ~ dgamma(0.001,0.001)
+  
+  #ssh[2] ~ dgamma(20.57512,79.64904)
+  ssh[2] ~ dgamma(0.001,0.001)
+  
+  ssh[3] ~ dgamma(0.001, 0.001)
+  
+  #ssh[4] ~ dgamma(53.59118,138.86460)
+  ssh[4] ~ dgamma(0.001,0.001)
+  
+  # rates
+  
+  #srt1[1] ~ dbeta(47.13542,633.08366)
+  srt1[1] ~ dbeta(1,1)
+  srt[1] <- srt1[1]/(1-srt1[1])
+  
+  #srt2[2] ~ dbeta(6.946785,14.183304)
+  srt2[2] ~ dbeta(1,1)
+  srt[2] <- srt2[2]/(1-srt2[2])
+  
+  srt3[3] ~ dbeta(1,1)
+  srt[3] <- srt3[3]/(1-srt3[3])
+  
+  #srt4[4] ~ dbeta(17.86595,77.49737)
+  srt4[4] ~ dbeta(1,1)
+  srt[4] <- srt4[4]/(1-srt4[4])
+  
+  ind <- order(ssh/srt)
+  ptemp ~ dbern(0.5)
+  ptemp1 ~ dbern(0.5)
+  
+  tkksh[1] <- ssh[ind[ptemp1+3]] # baseline 1 
+  tkksh[2] <- ssh[ind[1+ptemp]] # 4w post - low
+  tkksh[3] <- ssh[ind[1+(1-ptemp)]] # 4w post - low
+  tkksh[4] <- ssh[ind[(1-ptemp1)+3]]
+  
+  tkkrt[1] <- srt[ind[ptemp1+3]] # baseline 1 
+  tkkrt[2] <- srt[ind[1+ptemp]] # 4w post - low
+  tkkrt[3] <- srt[ind[1+(1-ptemp)]] # 4w post - low
+  tkkrt[4] <- srt[ind[(1-ptemp1)+3]] # baseline 2
     
     k ~ dgamma(0.001, 0.001)
-    intercept ~ dgamma(0.001, 0.001)
+    intercept ~ dnorm(0, 10^-6)
     
     for(n in 1:N){	# run through pop
       
       for (t in 1:Ti){ # run through timepoints
       
-            Status[n,t] ~ dbern(prev)
+            Status[n,t] ~ dbern(prev[t])
             
             lambda[n,t] <- tKK[n,Status[n,t]+1,t] 
             
@@ -168,10 +254,11 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
               } # end or r loop
       
             tKK[n,1,t] <- 0
-            tKK[n,2,t] ~ dgamma(tkksh, tkkrt)
+            tKK[n,2,t] ~ dgamma(tkksh[t], tkkrt[t])
   
-            prob[n,t,1] ~ dnorm(0,1.093606) 
-            prob[n,t,2] ~ dnorm(9 / (1 + exp(-k*(tKK[n,2,t]-intercept))),1.093606)
+            prob[n,t,1]~ dnorm(0,1.245443)T(0,9)
+            prob[n,t,2] ~ dnorm(9 / (1 + exp(-k*(tKK[n,2,t]-intercept))),1.245443)
+            #1.093606
             
             CCA10[n,t] ~ dround(prob[n,t,Status[n,t]+1],0)
             
@@ -179,9 +266,9 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
     } # N loop   
     
  
-  #inits# .RNG.seed, .RNG.name, Status, prob,  sigma
+  #inits# .RNG.seed, .RNG.name, Status, prob
   #data# N, Ti, R, KK, CCA10
-  #monitor#  prev, rtnb, k, intercept, Status
+  #monitor#  rtnb, tkksh, tkkrt, prev, k, intercept, Status
   
 }"
   
@@ -243,7 +330,7 @@ getKKChildWeek <- function(weekN,dts){
 
 getKKChildIDs <- function(nameFile){
   dt <- read.csv(nameFile)
-  return(sort(unique(dt$child_id)))
+  return(unique(dt$child_id))
 }
 
 #### Normal CCA Data ####
@@ -297,7 +384,7 @@ getCCAChild <- function(ID,dt,dates){
 # function for getting CCA child ID
 getCCAChildIDs <- function(nameFile){
   dt <- read.csv(nameFile)
-  return(sort(unique(dt$CID)))
+  return(unique(dt$CID))
 }
 
 #### GScore data ####
@@ -347,7 +434,7 @@ getCCAChildgscore <- function(ID,dt,dates){
 # function for getting CCA child ID
 getCCAChildIDsgscore <- function(nameFile){
   dt <- read.csv(nameFile)
-  return(sort(unique(dt$CID)))
+  return(unique(dt$CID))
 }
 
 #### sort model output into time steps ####
@@ -355,45 +442,49 @@ getCCAChildIDsgscore <- function(nameFile){
 time.steps <- function(model.output){
   
   t1 <- as.data.frame(model.output[,1:210])
+  colnames(t1) <- CID
   t2 <- as.data.frame(model.output[,211:420])
+  colnames(t2) <- CID
   t3 <- as.data.frame(model.output[,421:630])
+  colnames(t3) <- CID
   t4 <- as.data.frame(model.output[,631:840])
+  colnames(t4) <- CID
   
   t1[nrow(t1)+1,] <- colSums(t1)
   t1[nrow(t1),] <- t1[nrow(t1),]/40000
   
   t1.means <- as.data.frame(t1[nrow(t1),1:210])
   
-  t1.means$time <-as.factor("Baseline")
+  t1.means$time <-as.factor("pre-treatment")
   
-  T1 <- melt(t1.means)
+  T1 <- reshape2::melt(t1.means)
   
   t2[nrow(t2)+1,] <- colSums(t2)
   t2[nrow(t2),] <- t2[nrow(t2),]/40000
   
   t2.means <- as.data.frame(t2[nrow(t2),1:210])
   
-  t2.means$time <-as.factor("ThreeWeeks")
+  t2.means$time <-as.factor("three-weeks")
   
-  T2 <- melt(t2.means)
+  T2 <- reshape2::melt(t2.means)
   
   t3[nrow(t3)+1,] <- colSums(t3)
   t3[nrow(t3),] <- t3[nrow(t3),]/40000
   
   t3.means <- as.data.frame(t3[nrow(t3),1:210])
   
-  t3.means$time <- as.factor("NineWeeks")
+  t3.means$time <- as.factor("nine-weeks")
   
-  T3 <- melt(t3.means)
+  T3 <- reshape2::melt(t3.means)
   
   t4[nrow(t4)+1,] <- colSums(t4)
   t4[nrow(t4),] <- t4[nrow(t4),]/40000
   
   t4.means <- as.data.frame(t4[nrow(t4),1:210])
   
-  t4.means$time <- as.factor("SixMonths")
+  t4.means$time <- as.factor("six-months")
   
-  T4 <- melt(t4.means)
+  T4 <- reshape2::melt(t4.means)
   
   props <- rbind(T1, T2, T3, T4)
   
@@ -426,8 +517,14 @@ time.pointmeans <- function(list.name){
 
 #### log curve function ####
 
-logcurve <- function(x,k,intercept){
-  y <- 1 / (1 + exp(-k*(x-intercept)))
+logcurvecca <- function(x,k,intercept){
+  y <- 4 / (1 + exp(-k*(x-intercept)))
+  return(y)
+}
+
+
+logcurvegscore <- function(x,k,intercept){
+  y <- 9 / (1 + exp(-k*(x-intercept)))
   return(y)
 }
 
@@ -441,298 +538,204 @@ add_legend <- function(...) {
   legend(...)
 }
 
-#### roc curve function ####
+#### ROC curve functions ####
 
-diag_spec <- function(status.output, condition.data.frame ){
+## G-Score 
+
+plotfuncgs <- function(fptpobj, aucobj){
   
-  t1 <- as.data.frame(status.output[,1:210])
-  t2 <- as.data.frame(status.output[,211:420])
-  t3 <- as.data.frame(status.output[,421:630])
-  t4 <- as.data.frame(status.output[,631:840])
-  
-  colnames(t1) <- CID
-  colnames(t2) <- CID
-  colnames(t3) <- CID
-  colnames(t4) <- CID
-  
-  t1status.sample <- t1[sample.int(nrow(t1), 500, replace=FALSE, prob=NULL),]
-  t1status.sample <- t(t1status.sample)
-  t1status.sample <- as.data.frame(cbind(rownames(t1status.sample), data.frame(t1status.sample, row.names=NULL)))
-  t1status.sample <- t1status.sample %>% rename(CID=`rownames(t1status.sample)`)
-  
-  # join to the kkpos
-  merge <- condition.data.frame %>%
-    right_join(t1status.sample, by="CID")%>%
-    filter(dateN=="Pre-T")
-  
-  merge <- merge[!duplicated(merge[,"CID"]),]  
-  
-  # get the sensitivity/ specificity 
-  for(i in 1:nrow(merge)){
-    for(c in 4:ncol(merge)){
-      if(merge[i,3]==1 & merge[i,c]==1){
-        merge[i,c] <- "TP"
-      } else if(merge[i,3]==1 & merge[i,c]==0){
-        merge[i,c] <- "FP"
-      } else if(merge[i,3]==0 & merge[i,c]==0){
-        merge[i,c] <- "TN" 
-      } else {
-        merge[i,c] <- "FN" 
-      }
-    }
-  }
-  speclist <- list()
-  
-  # calculate how often each one occurs and get proportions 
-  for(i in 4:ncol(merge)){
-    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
-      mutate(proportion = n/sum(n))
+  # auc values
+  aucvals <- list()
+  for(i in 1:500){
+    aucvals[[i]] <- slot(aucobj, "y.values" )[[i]]
   }
   
-  test.specs<- list()
-  for(i in 1:length(speclist)){
-    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-    colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
-    } else {
-      test.specs[[i]][1,1] <- NA
-    }
-    
-    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
-    } else {
-      test.specs[[i]][1,2] <- NA
-    }
+  aucvals <- data.frame(do.call(rbind, aucvals))
+  colnames(aucvals) <- "AUC"
+  sdauc <- sd(aucvals$AUC)
+  
+  # TP/ FP values 
+  tprate <- list()
+  fprate <- list()
+  for(i in 1:500){
+    tprate[[i]] <- slot(fptpobj, "y.values")[[i]]
+    fprate[[i]] <- slot(fptpobj, "x.values")[[i]]
   }
   
-  roct1 <- rbindlist(test.specs)
-  roct1 <- roct1 %>% mutate(time = "pre-T")%>%mutate_if(is.character, as.factor)
+  tpraterate <- data.frame(do.call(rbind, tprate))
+  tpraterate <- melt(tpraterate)
+  colnames(tpraterate) <- c("cutoff", "tprate")
+  fpratedf <- data.frame(do.call(rbind, fprate))
+  fpratedf <- melt(fpratedf)
+  colnames(fpratedf) <- c("cutoff", "fprate")
+  fpratedf$cutoff <- dplyr::recode(fpratedf$cutoff, "X1"="Nothing is positive", 
+                                   "X2"="G9","X3"="G8", "X4"="G7", 
+                                   "X5"="G6", "X6"="G5", "X7"="G4",
+                                   "X8"="G3", "X9"="G2", "X10"="G1")
   
-  # 2nd time point 
-  
-  t2status.sample <- t2[sample.int(nrow(t2), 500, replace=FALSE, prob=NULL),]
-  t2status.sample <- t(t2status.sample)
-  t2status.sample <- as.data.frame(cbind(rownames(t2status.sample), data.frame(t2status.sample, row.names=NULL)))
-  t2status.sample <- t2status.sample %>% rename(CID=`rownames(t2status.sample)`)
+  # make plot data
+  plotdata <- data.frame(FP=fpratedf$fprate, TP=tpraterate$tprate, CUT=fpratedf$cutoff)
   
   
-  merge <- condition.data.frame %>%
-    right_join(t2status.sample, by="CID")%>%
-    filter(dateN=="3 weeks")
+  plotdata <- melt(data=plotdata, id.vars = "CUT", measure.vars = c("TP", "FP"))
+  plotdatasum <- plotdata %>%
+    group_by(CUT, variable) %>%
+    summarise(mean=mean(value), sd=sd(value))%>%
+    pivot_wider(names_from = c(variable), values_from=c(mean, sd))%>%
+    mutate(CUT=factor(CUT))
   
-  merge <- merge[!duplicated(merge[,"CID"]),]  
+  # make plot 
+  colours=c("#dadaeb","#bcbddc","#bfd3e6","#9ebcda","#74a9cf", "#8c96c6","#8c6bb1","#88419d","#810f7c", "black")
+  plot <- ggplot()+
+    geom_abline(intercept=0,slope=1) +
+    geom_path(data=plotdatasum, aes(x=mean_FP, y=mean_TP), lwd=1) + 
+    geom_point(data=plotdatasum, aes(x=mean_FP, y=mean_TP,colour=CUT), size=5, shape=1, stroke=3)+
+    geom_errorbar(data=plotdatasum,aes(x=mean_FP, ymin=mean_TP-sd_TP, ymax=mean_TP+sd_TP))+
+    geom_errorbarh(data=plotdatasum,aes(y=mean_TP, xmin=mean_FP-sd_FP, xmax=mean_FP+sd_FP))+
+    annotate("text",x=0.97,y=0.02,label=paste("AUC = ",round(mean(aucvals$AUC),digits=2),"±", round(sdauc, 2),sep=""),hjust=1) +
+    scale_colour_manual("Threshold Cutoff",values = rev(colours))+
+    #scale_colour_gradientn("Threhsold Cutoff",colours=rainbow(14)[1:11], trans = 'reverse') +
+    #annotate("text",x=0.97,y=0.06,label=paste("Sens = ",round(mean(specsen$sensitivity),digits=2),sep=""),hjust=1) +
+    #annotate("text",x=0.97,y=0.08,label=paste("Spec = ",round(mean(specsen$specificity),digits=2),sep=""),hjust=1) 
+    xlab("False Positive Rate") + ylab("True Positive Rate")+
+    theme_bw()+
+    theme(text = element_text(size=16))
+  return(plot)
   
-  # get the sensitivity/ specificity 
-  for(i in 1:nrow(merge)){
-    for(c in 4:ncol(merge)){
-      if(merge[i,3]==1 & merge[i,c]==1){
-        merge[i,c] <- "TP"
-      } else if(merge[i,3]==1 & merge[i,c]==0){
-        merge[i,c] <- "FP"
-      } else if(merge[i,3]==0 & merge[i,c]==0){
-        merge[i,c] <- "TN" 
-      } else {
-        merge[i,c] <- "FN" 
-      }
-    }
-  }
-  speclist <- list()
+}
+
+plotfuncgst4 <- function(fptpobj, aucobj){
   
-  # calculate how often each one occurs and get proportions 
-  for(i in 4:ncol(merge)){
-    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
-      mutate(proportion = n/sum(n))
-  }
-  
-  test.specs<- list()
-  for(i in 1:length(speclist)){
-    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-    colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
-    } else {
-      test.specs[[i]][1,1] <- NA
-    }
-    
-    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
-    } else {
-      test.specs[[i]][1,2] <- NA
-    }
+  # auc values
+  aucvals <- list()
+  for(i in 1:500){
+    aucvals[[i]] <- slot(aucobj, "y.values" )[[i]]
   }
   
-  roct2 <- rbindlist(test.specs)
-  roct2 <- roct2 %>% mutate(time = "3 weeks")%>%mutate_if(is.character, as.factor)
+  aucvals <- data.frame(do.call(rbind, aucvals))
+  colnames(aucvals) <- "AUC"
+  sdauc <- sd(aucvals$AUC)
   
-  # 3rd time point 
-  
-  t3status.sample <- t3[sample.int(nrow(t3), 500, replace=FALSE, prob=NULL),]
-  t3status.sample <- t(t3status.sample)
-  t3status.sample <- as.data.frame(cbind(rownames(t3status.sample), data.frame(t3status.sample, row.names=NULL)))
-  t3status.sample <- t3status.sample %>% rename(CID=`rownames(t3status.sample)`)
-  
-  
-  merge <- condition.data.frame %>%
-    right_join(t3status.sample, by="CID")%>%
-    filter(dateN=="9 weeks")
-  
-  merge <- merge[!duplicated(merge[,"CID"]),]  
-  
-  # get the sensitivity/ specificity 
-  for(i in 1:nrow(merge)){
-    for(c in 4:ncol(merge)){
-      if(merge[i,3]==1 & merge[i,c]==1){
-        merge[i,c] <- "TP"
-      } else if(merge[i,3]==1 & merge[i,c]==0){
-        merge[i,c] <- "FP"
-      } else if(merge[i,3]==0 & merge[i,c]==0){
-        merge[i,c] <- "TN" 
-      } else {
-        merge[i,c] <- "FN" 
-      }
-    }
-  }
-  speclist <- list()
-  
-  # calculate how often each one occurs and get proportions 
-  for(i in 4:ncol(merge)){
-    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
-      mutate(proportion = n/sum(n))
+  # TP/ FP values 
+  tprate <- list()
+  fprate <- list()
+  for(i in 1:500){
+    tprate[[i]] <- slot(fptpobj, "y.values")[[i]]
+    fprate[[i]] <- slot(fptpobj, "x.values")[[i]]
   }
   
-  test.specs<- list()
-  for(i in 1:length(speclist)){
-    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-    colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
-    } else {
-      test.specs[[i]][1,1] <- NA
-    }
-    
-    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
-    } else {
-      test.specs[[i]][1,2] <- NA
-    }
-  }
-  
-  roct3 <- rbindlist(test.specs)
-  roct3 <- roct3 %>% mutate(time = "9 weeks")%>%mutate_if(is.character, as.factor)
-  
-  # 4th time point 
-  
-  t4status.sample <- t4[sample.int(nrow(t4), 500, replace=FALSE, prob=NULL),]
-  t4status.sample <- t(t4status.sample)
-  t4status.sample <- as.data.frame(cbind(rownames(t4status.sample), data.frame(t4status.sample, row.names=NULL)))
-  t4status.sample <- t4status.sample %>% rename(CID=`rownames(t4status.sample)`)
+  tpraterate <- data.frame(do.call(rbind, tprate))
+  tpraterate <- melt(tpraterate)
+  colnames(tpraterate) <- c("cutoff", "tprate")
+  fpratedf <- data.frame(do.call(rbind, fprate))
+  fpratedf <- melt(fpratedf)
+  colnames(fpratedf) <- c("cutoff", "fprate")
+  fpratedf$cutoff <- dplyr::recode(fpratedf$cutoff, "X1"="Nothing is positive", "X2"="G10","X3"="G9", "X4"="G8", 
+                                   "X5"="G7", "X6"="G6", "X7"="G5",
+                                   "X8"="G4", "X9"="G3", "X10"="G2", "X11"="G1")
+
+  # make plot data
+  plotdata <- data.frame(FP=fpratedf$fprate, TP=tpraterate$tprate, CUT=fpratedf$cutoff)
   
   
-  merge <- condition.data.frame %>%
-    right_join(t4status.sample, by="CID")%>%
-    filter(dateN=="6 months")
+  plotdata <- melt(data=plotdata, id.vars = "CUT", measure.vars = c("TP", "FP"))
+  plotdatasum <- plotdata %>%
+    group_by(CUT, variable) %>%
+    summarise(mean=mean(value), sd=sd(value))%>%
+    pivot_wider(names_from = c(variable), values_from=c(mean, sd))%>%
+    mutate(CUT=factor(CUT))
   
-  merge <- merge[!duplicated(merge[,"CID"]),]  
+  # make plot 
+  colours=c("#dadaeb","#bcbddc","#bfd3e6","#9ebcda","#74a9cf", "#8c96c6","#8c6bb1","#88419d","#810f7c","#4d004b", "black")
+  plot <- ggplot()+
+    geom_abline(intercept=0,slope=1) +
+    geom_path(data=plotdatasum, aes(x=mean_FP, y=mean_TP), lwd=1) + 
+    geom_point(data=plotdatasum, aes(x=mean_FP, y=mean_TP,colour=CUT), size=5, shape=1, stroke=3)+
+    geom_errorbar(data=plotdatasum,aes(x=mean_FP, ymin=mean_TP-sd_TP, ymax=mean_TP+sd_TP))+
+    geom_errorbarh(data=plotdatasum,aes(y=mean_TP, xmin=mean_FP-sd_FP, xmax=mean_FP+sd_FP))+
+    annotate("text",x=0.97,y=0.02,label=paste("AUC = ",round(mean(aucvals$AUC),digits=2),"±", round(sdauc, 2),sep=""),hjust=1) +
+    scale_colour_manual("Threshold Cutoff",values = rev(colours))+
+    #scale_colour_gradientn("Threhsold Cutoff",colours=rainbow(14)[1:11], trans = 'reverse') +
+    #annotate("text",x=0.97,y=0.06,label=paste("Sens = ",round(mean(specsen$sensitivity),digits=2),sep=""),hjust=1) +
+    #annotate("text",x=0.97,y=0.08,label=paste("Spec = ",round(mean(specsen$specificity),digits=2),sep=""),hjust=1) 
+    xlab("False Positive Rate") + ylab("True Positive Rate")+
+    theme_bw()+
+    theme(text = element_text(size=16))
+  return(plot)
   
-  # get the sensitivity/ specificity 
-  for(i in 1:nrow(merge)){
-    for(c in 4:ncol(merge)){
-      if(merge[i,3]==1 & merge[i,c]==1){
-        merge[i,c] <- "TP"
-      } else if(merge[i,3]==1 & merge[i,c]==0){
-        merge[i,c] <- "FP"
-      } else if(merge[i,3]==0 & merge[i,c]==0){
-        merge[i,c] <- "TN" 
-      } else {
-        merge[i,c] <- "FN" 
-      }
-    }
-  }
-  speclist <- list()
-  
-  # calculate how often each one occurs and get proportions 
-  for(i in 4:ncol(merge)){
-    speclist[[i-3]] <-  merge %>% group_by(merge[,i]) %>% tally() %>%
-      mutate(proportion = n/sum(n))
-  }
-  
-  test.specs<- list()
-  for(i in 1:length(speclist)){
-    test.specs[[i]] <- as.data.frame(matrix(nrow=1, ncol=2))
-    colnames(test.specs[[i]]) <- c("TPR", "FPR")
-    if("TP" %in% speclist[[i]]$`merge[, i]`== TRUE && "FN" %in% speclist[[i]]$`merge[, i]`== TRUE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+speclist[[i]][[which(speclist[[i]]=="FN"),2]])
-    } else if("TP" %in% speclist[[i]]$`merge[, i]` == TRUE && "FN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,1] <- speclist[[i]][[which(speclist[[i]]=="TP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TP"),2]]+0)
-    } else {
-      test.specs[[i]][1,1] <- NA
-    }
-    
-    if("FP" %in% speclist[[i]]$`merge[, i]`== TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==TRUE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="TN"),2]]+speclist[[i]][[which(speclist[[i]]=="FP"),2]]))
-    } else if("FP" %in% speclist[[i]]$`merge[, i]` == TRUE && "TN" %in% speclist[[i]]$`merge[, i]`==FALSE){
-      test.specs[[i]][1,2] <- (speclist[[i]][[which(speclist[[i]]=="FP"),2]]/(speclist[[i]][[which(speclist[[i]]=="FP"),2]]+0))
-    } else {
-      test.specs[[i]][1,2] <- NA
-    }
-  }
-  
-  roct4 <- rbindlist(test.specs)
-  roct4 <- roct4 %>% mutate(time = "6 months")%>%mutate_if(is.character, as.factor)
-  
-  
-  rocalltime <- bind_rows(roct1, roct2, roct3, roct4)
-  return(rocalltime)
 }
 
 
-diag_spec2 <- function(status.sample, condition.data.frame ){
+## CCA 
+plotfunccca <- function(fptpobj, aucobj){
   
-  t1 <- as.data.frame(status.sample[,1:210])
-  t2 <- as.data.frame(status.sample[,211:420])
-  t3 <- as.data.frame(status.sample[,421:630])
-  t4 <- as.data.frame(status.sample[,631:840])
+  # auc values
+  aucvals <- list()
+  for(i in 1:500){
+    aucvals[[i]] <- slot(aucobj, "y.values" )[[i]]
+  }
   
-  colnames(t1) <- CID
-  colnames(t2) <- CID
-  colnames(t3) <- CID
-  colnames(t4) <- CID
+  aucvals <- data.frame(do.call(rbind, aucvals))
+  colnames(aucvals) <- "AUC"
+  sdauc <- sd(aucvals$AUC)
   
-  t1 <- t(t1)
-  t2 <- t(t2)
-  t3 <- t(t3)
-  t4 <- t(t4)
+  # TP/ FP values 
+  tprate <- list()
+  fprate <- list()
+  for(i in 1:500){
+    tprate[[i]] <- slot(fptpobj, "y.values")[[i]]
+    fprate[[i]] <- slot(fptpobj, "x.values")[[i]]
+  }
   
-  t1 <- as.data.frame(cbind(rownames(t1), data.frame(t1, row.names=NULL)))
-  t1 <- t1 %>% rename(CID=`rownames(t1)`)
+  tpraterate <- data.frame(do.call(rbind, tprate))
+  tpraterate <- melt(tpraterate)
+  colnames(tpraterate) <- c("cutoff", "tprate")
+  fpratedf <- data.frame(do.call(rbind, fprate))
+  fpratedf <- melt(fpratedf)
+  colnames(fpratedf) <- c("cutoff", "fprate")
+  fpratedf$cutoff <- dplyr::recode(fpratedf$cutoff, "X1"="Nothing is positive", "X2"="+++","X3"="++", "X4"="+", "X5"="Trace", "X6"="Negative")
+  #fpratedf$cutoff <- as.numeric(as.character(fpratedf$cutoff))
   
-  t2 <- as.data.frame(cbind(rownames(t2), data.frame(t2, row.names=NULL)))
-  t2 <- t2 %>% rename(CID=`rownames(t2)`)
+  # make plot data
+  plotdata <- data.frame(FP=fpratedf$fprate, TP=tpraterate$tprate, CUT=fpratedf$cutoff)
   
-  t3 <- as.data.frame(cbind(rownames(t3), data.frame(t3, row.names=NULL)))
-  t3 <- t3 %>% rename(CID=`rownames(t3)`)
   
-  t4 <- as.data.frame(cbind(rownames(t4), data.frame(t4, row.names=NULL)))
-  t4 <- t4 %>% rename(CID=`rownames(t4)`)
+  plotdata <- melt(data=plotdata, id.vars = "CUT", measure.vars = c("TP", "FP"))
+  plotdatasum <- plotdata %>%
+    group_by(CUT, variable) %>%
+    summarise(mean=mean(value), sd=sd(value))%>%
+    pivot_wider(names_from = c(variable), values_from=c(mean, sd))%>%
+    mutate(CUT=factor(CUT))
+  
+  # make plot 
+  colours=c( "#fdd0a2","#fd8d3c","#f16913","#d94801","#8c2d04",  "black")
+  plot <- ggplot()+
+    geom_abline(intercept=0,slope=1) +
+    geom_path(data=plotdatasum, aes(x=mean_FP, y=mean_TP), lwd=1) + 
+    geom_point(data=plotdatasum, aes(x=mean_FP, y=mean_TP,colour=CUT), size=5, shape=1, stroke=3)+
+    geom_errorbar(data=plotdatasum,aes(x=mean_FP, ymin=mean_TP-sd_TP, ymax=mean_TP+sd_TP))+
+    geom_errorbarh(data=plotdatasum,aes(y=mean_TP, xmin=mean_FP-sd_FP, xmax=mean_FP+sd_FP))+
+    annotate("text",x=0.97,y=0.02,label=paste("AUC = ",round(mean(aucvals$AUC),digits=2),"±", round(sdauc, 2),sep=""),hjust=1) +
+    scale_colour_manual("Threshold Cutoff",values = rev(colours))+
+    #scale_colour_gradientn("Threhsold Cutoff",colours=rainbow(14)[1:11], trans = 'reverse') +
+    #annotate("text",x=0.97,y=0.06,label=paste("Sens = ",round(mean(specsen$sensitivity),digits=2),sep=""),hjust=1) +
+    #annotate("text",x=0.97,y=0.08,label=paste("Spec = ",round(mean(specsen$specificity),digits=2),sep=""),hjust=1) 
+    xlab("False Positive Rate") + ylab("True Positive Rate")+
+    theme_bw()+
+    theme(text = element_text(size=16))
+  return(plot)
+  
+}
 
-  
+
+
+#### roc curve function ####
+
+diag_specgscoret1 <- function(t1, condition.data.frame){
+
   # join to the condition
   merge <- condition.data.frame %>%
-    right_join(t1, by="CID")%>%
-    filter(dateN=="Pre-T")
+    right_join(t1, by="CID")
   
   # get the sensitivity/ specificity 
   for(i in 1:nrow(merge)){
@@ -771,7 +774,11 @@ diag_spec2 <- function(status.sample, condition.data.frame ){
   
   roct1 <- rbindlist(test.specs)
   roct1 <- roct1 %>% mutate(time = "pre-T")%>% mutate_if(is.character, as.factor)
-  
+
+   return(roct1)
+}
+
+diag_specgscoret2 <- function(t2, condition.data.frame ){
   # 2nd time point 
   
   merge <- condition.data.frame %>%
@@ -792,7 +799,6 @@ diag_spec2 <- function(status.sample, condition.data.frame ){
       }
     }
   }
-  speclist <- list()
   
   # calculate how often each one occurs and get proportions 
   speclist <- list()
@@ -817,8 +823,12 @@ diag_spec2 <- function(status.sample, condition.data.frame ){
   roct2 <- rbindlist(test.specs)
   roct2 <- roct2 %>% mutate(time = "3 weeks")%>%mutate_if(is.character, as.factor)
   
-  # 3rd time point 
+  return(roct2)
+  
+}
 
+diag_specgscoret3 <- function(t3, condition.data.frame ){
+  
   merge <- condition.data.frame %>%
     right_join(t3, by="CID")%>%
     filter(dateN=="9 weeks")
@@ -862,8 +872,12 @@ diag_spec2 <- function(status.sample, condition.data.frame ){
   roct3 <- rbindlist(test.specs)
   roct3 <- roct3 %>% mutate(time = "9 weeks")%>%mutate_if(is.character, as.factor)
   
+  return(roct3)
+  
+}
   # 4th time point 
-
+diag_specgscoret4 <- function(t4, condition.data.frame){
+  
   merge <- condition.data.frame %>%
     right_join(t4, by="CID")%>%
     filter(dateN=="6 months")
@@ -908,11 +922,32 @@ diag_spec2 <- function(status.sample, condition.data.frame ){
   roct4 <- rbindlist(test.specs)
   roct4 <- roct4 %>% mutate(time = "6 months")%>%mutate_if(is.character, as.factor)
   
-  
-  rocalltime <- bind_rows(roct1, roct2, roct3, roct4)
-  return(rocalltime)
+  return(roct4)
 }
 
+# calculating the optimal point on the ROC curve by maximising Youden's index
+# this is when you maximise the sum of the spec and sens
+# according to Kaivanto, 2008, Journal of Clinical Epi this is fine if the aim is maximise correct ID of disease 
+# and if the cost of misclassifying the diseased is equal to mis-classifying the non-diseased. 
+# I think this is justiable. 
+rocr_sensspec <- function(x, class) {
+  pred <- ROCR::prediction(x, class)
+  perf <- ROCR::performance(pred, "sens", "spec")
+  sens <- slot(perf, "y.values")[[1]]
+  spec <- slot(perf, "x.values")[[1]]
+  cut <- slot(perf, "alpha.values")[[1]]
+  cut[which.max(sens + spec)]
+}
 
+# extracting the kk data from the array 
+getKKtime <- function(ArrayName, TimeStep){
+  kkTime <- as.data.frame(cbind(ArrayName[,,1][,TimeStep],ArrayName[,,2][,TimeStep],ArrayName[,,3][,TimeStep],ArrayName[,,4][,TimeStep],ArrayName[,,5][,TimeStep],ArrayName[,,6][,TimeStep]))%>%
+    mutate(CID=CID, 
+           meancount=rowMeans(., na.rm = T),
+           kkstatus=case_when(meancount>0~1,
+                              meancount==0~0, 
+                              TRUE~NA_real_))
+  return(kkTime)
+}
 
   
