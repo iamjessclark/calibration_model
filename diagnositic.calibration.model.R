@@ -86,31 +86,23 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
   # make the mean sh/rt and sort them 
   # shapes
   
-  #ssh[1] ~ dgamma(83.88592,125.70331)
   ssh[1] ~ dgamma(0.001,0.001)
-  
-  #ssh[2] ~ dgamma(20.57512,79.64904)
   ssh[2] ~ dgamma(0.001,0.001)
-  
   ssh[3] ~ dgamma(0.001, 0.001)
-  
-  #ssh[4] ~ dgamma(53.59118,138.86460)
   ssh[4] ~ dgamma(0.001,0.001)
   
   # rates
-  
-  #srt1[1] ~ dbeta(47.13542,633.08366)
+
   srt1[1] ~ dbeta(1,1)
   srt[1] <- srt1[1]/(1-srt1[1])
   
-  #srt2[2] ~ dbeta(6.946785,14.183304)
+
   srt2[2] ~ dbeta(1,1)
   srt[2] <- srt2[2]/(1-srt2[2])
   
   srt3[3] ~ dbeta(1,1)
   srt[3] <- srt3[3]/(1-srt3[3])
-  
-  #srt4[4] ~ dbeta(17.86595,77.49737)
+
   srt4[4] ~ dbeta(1,1)
   srt[4] <- srt4[4]/(1-srt4[4])
   
@@ -148,10 +140,10 @@ CalModKKCCA <- function (N, Ti, R, KK, CCA) {
       tKK[n,1,t] <- 0                                                                                                                                                                                                                                                                                               
       tKK[n,2,t] ~ dgamma(tkksh[t], tkkrt[t])
       
-      prob[n,t,1]~ dnorm(0,1.863282)T(0,4)
+      prob[n,t,1]~ dnorm(0,3.47182)T(0,4)
       prob[n,t,2] ~ dnorm(4 / (1 + exp(-k*(tKK[n,2,t]-intercept))), 3.47182)
-      #3.093451  
       CCA[n,t] ~ dround(prob[n,t,Status[n,t]+1],0)
+  
       
       } # end timestep t loop
     } #N
@@ -196,31 +188,22 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
   # make the mean sh/rt and sort them 
   # shapes
   
-  #ssh[1] ~ dgamma(83.88592,125.70331)
   ssh[1] ~ dgamma(0.001,0.001)
-  
-  #ssh[2] ~ dgamma(20.57512,79.64904)
   ssh[2] ~ dgamma(0.001,0.001)
-  
   ssh[3] ~ dgamma(0.001, 0.001)
-  
-  #ssh[4] ~ dgamma(53.59118,138.86460)
   ssh[4] ~ dgamma(0.001,0.001)
   
   # rates
-  
-  #srt1[1] ~ dbeta(47.13542,633.08366)
+ 
   srt1[1] ~ dbeta(1,1)
   srt[1] <- srt1[1]/(1-srt1[1])
   
-  #srt2[2] ~ dbeta(6.946785,14.183304)
   srt2[2] ~ dbeta(1,1)
   srt[2] <- srt2[2]/(1-srt2[2])
   
   srt3[3] ~ dbeta(1,1)
   srt[3] <- srt3[3]/(1-srt3[3])
   
-  #srt4[4] ~ dbeta(17.86595,77.49737)
   srt4[4] ~ dbeta(1,1)
   srt[4] <- srt4[4]/(1-srt4[4])
   
@@ -273,7 +256,7 @@ CalModKKGScore <- function (N, Ti, R, KK, CCA10) {
 }"
   
   # Run model #
-  Results <- run.jags(m, burnin=10000, sample=20000, n.chains=2, jags.refresh = 1, method = 'parallel',
+  Results <- run.jags(m, burnin=10000, sample=40000, n.chains=2, jags.refresh = 1, method = 'parallel',
                       plots = F, silent.jags = F)
   return(Results)
 }
